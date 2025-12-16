@@ -1,0 +1,64 @@
+# 环境变量配置
+.env.local
+
+# Python缓存和编译文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境
+.venv/
+venv/
+ENV/
+
+# 数据存储目录（视频、图片等）
+integrated_data/
+# - 包含 key_moments/ (关键时刻视频和图片)
+# - 包含 face_database/ (人脸数据库图片)
+# - 包含 snapshots/ (快照图片)
+# - 包含 keyframes/ (关键帧图片)
+
+# 预训练模型文件（通常很大，不应提交到Git）
+pretrained_models/
+pretrained_models/FireRedASR-AED-L/model.pth.tar
+*.pth
+*.pth.tar
+*.pt
+*.onnx
+*.pb
+*.h5
+*.safetensors
+
+# YOLO模型文件
+yolo*.pt
+models/*.pt
+
+# 按钮日志
+button_log.txt
+
+# 录音文件
+recordings/
+*.wav
+*.mp3
+
+# 临时文件
+*.tmp
+*.bak
+*.swp
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE配置
+.vscode/
+.idea/
+*.sublime-*
+
+# 日志文件
+*.log
+logs/

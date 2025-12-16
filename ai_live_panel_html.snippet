@@ -1,0 +1,32 @@
+<!-- 🎬 AI直播间面板 -->
+<!-- 插入位置：紧接在 voice-ai-section 之后 -->
+<div id="ai-live-panel" class="panel" style="display:none; flex-direction:column; flex:1;">
+    <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center;">
+        🎬 AI直播间
+        <button class="module-hide-btn" onclick="toggleAILive(false)" style="position:static; margin:0;">关闭</button>
+    </div>
+    
+    <!-- 评论流容器 -->
+    <div id="commentary-stream" style="flex:1; overflow-y:auto; padding:12px; background:linear-gradient(135deg,#f8f8f8 0%,#e8e8e8 100%); position:relative;">
+        <!-- 气泡会动态插入这里 -->
+    </div>
+    
+    <!-- 用户输入区 -->
+    <div id="user-comment-box" style="padding:8px; background:white; border-top:2px solid black; display:flex; gap:8px;">
+        <input type="text" id="user-comment-input" placeholder="发送评论..." 
+               style="flex:1; padding:8px; border:2px solid black; font-size:12px;"
+               onkeypress="if(event.key==='Enter') sendUserComment()">
+        <button onclick="sendUserComment()" 
+                style="padding:8px 16px; border:2px solid black; background:white; cursor:pointer; font-weight:bold;">
+            发送
+        </button>
+    </div>
+</div>
+
+<!-- 悬浮控制器（可拖动） -->
+<div id="floating-controls" style="position:fixed; top:80px; right:20px; z-index:1000; display:flex; flex-direction:column; gap:10px;">
+    <!-- AI直播间大红按钮 -->
+    <div class="floating-btn big-red" id="ai-live-btn" onclick="toggleAILive()">
+        🔴<br>LIVE
+    </div>
+</div>

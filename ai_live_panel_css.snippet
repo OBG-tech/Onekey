@@ -1,0 +1,130 @@
+/* 🎬 AI直播间样式 - 插入到 <style> 标签底部 */
+
+/* AI直播间面板 */
+#ai-live-panel {
+    position: relative;
+    background: white;
+    border: 3px solid black;
+}
+
+#commentary-stream {
+    scrollbar-width: thin;
+}
+
+/* 评论气泡 */
+.commentary-bubble {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 12px;
+    position: relative;
+    animation: bubble-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes bubble-pop {
+    0% {
+        transform: translateY(50px);
+        opacity: 0;
+        scale: 0.8;
+    }
+    100% {
+        transform: translateY(0);
+        opacity: 1;
+        scale: 1;
+    }
+}
+
+.commentary-bubble.commentator {
+    background: linear-gradient(135deg, #ff6666, #ff4444);
+    border: 3px solid #cc0000;
+    box-shadow: 0 4px 15px rgba(255,68,68,0.5);
+    color: white;
+    font-weight: 900;
+}
+
+.commentary-bubble.audience {
+    background: linear-gradient(135deg, #f0f0f0, #e0e0e0);
+    border: 2px solid #333;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.commentary-bubble.user {
+    background: linear-gradient(135deg, #a8e6cf, #7ed6ac);
+    border: 2px solid #56ab91;
+}
+
+.bubble-avatar {
+    font-size: 32px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.bubble-content {
+    flex: 1;
+}
+
+.bubble-name {
+    font-size: 10px;
+    font-weight: bold;
+    margin-bottom: 4px;
+    opacity: 0.8;
+}
+
+.bubble-text {
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+/* 悬浮按钮 */
+.floating-btn {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    border: 3px solid black;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    box-shadow: 4px 4px 0 rgba(0,0,0,0.3);
+    font-size: 14px;
+    transition: all 0.2s;
+    user-select: none;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.floating-btn:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 rgba(0,0,0,0.4);
+}
+
+.floating-btn.big-red {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, #ff4444, #cc0000);
+    color: white;
+    font-weight: 900;
+    font-size: 12px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.floating-btn:active {
+    cursor: grabbing;
+}
+
+/* AI直播间激活时，隐藏Speech/Notes */
+body.ai-live-active #voice-ai-section {
+    display: none !important;
+}
+
+body.ai-live-active #ai-live-panel {
+    display: flex !important;
+}

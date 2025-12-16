@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=智能视频分析系统
+Comment=一键启动视频分析系统
+Exec=gnome-terminal -- bash -c "cd /home/nucleus/1214zzh/1215zzh && source .venv/bin/activate && python3 LAUNCH_GUI.py; exec bash"
+Icon=video-display
+Terminal=false
+Categories=Utility;
+StartupNotify=true

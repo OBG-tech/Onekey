@@ -1,0 +1,186 @@
+// 🎬 AI直播间JavaScript - 插入到 <script> 标签底部
+
+let aiLiveActive = false;
+let commentaryInterval = null;
+
+// 切换AI直播间
+async function toggleAILive(activate = null) {
+    if (activate !== null) {
+        aiLiveActive = !activate;
+    }
+    aiLiveActive = !aiLiveActive;
+    
+    if (aiLiveActive) {
+        // 显示AI直播间
+        document.body.classList.add('ai-live-active');
+        
+        // 启动后端
+        try {
+            const res = await fetch('/api/ai_live/start', { method: 'POST' });
+            const data = await res.json();
+            if (!data.success) {
+                console.error('启动失败:', data.error);
+                aiLiveActive = false;
+                document.body.classList.remove('ai-live-active');
+                return;
+            }
+        } catch (e) {
+            console.error('启动失败:', e);
+            aiLiveActive = false;
+            document.body.classList.remove('ai-live-active');
+            return;
+        }
+        
+        // 启动评论循环
+        startCommentaryLoop();
+    } else {
+        // 关闭AI直播间
+        document.body.classList.remove('ai-live-active');
+        stopCommentaryLoop();
+        
+        // 停止后端
+        try {
+            await fetch('/api/ai_live/stop', { method: 'POST' });
+        } catch (e) {
+            console.error('停止失败:', e);
+        }
+    }
+}
+
+// 循环生成评论
+async function startCommentaryLoop() {
+    // 首次立即生成
+    await generateCommentary();
+    
+    // 每10-20秒生成一次
+    commentaryInterval = setInterval(async () => {
+        await generateCommentary();
+    }, 10000 + Math.random() * 10000);
+}
+
+function stopCommentaryLoop() {
+    if (commentaryInterval) {
+        clearInterval(commentaryInterval);
+        commentaryInterval = null;
+    }
+}
+
+// 生成评论
+async function generateCommentary() {
+    try {
+        const res = await fetch('/api/ai_live/generate', { method: 'POST' });
+        const data = await res.json();
+        
+        if (!data.success) {
+            console.error('生成失败:', data.error);
+            return;
+        }
+        
+        // 显示评论员评论
+        if (data.commentator) {
+            addBubble(
+                data.commentator.content,
+                data.commentator.role,
+                `${data.commentator.emoji} ${data.commentator.author}`
+            );
+        }
+        
+        // 显示观众评论（错开时间）
+        if (data.audience) {
+            data.audience.forEach((msg, idx) => {
+                setTimeout(() => {
+                    addBubble(
+                        msg.content,
+                        msg.role,
+                        `${msg.emoji} ${msg.author}`
+                    );
+                }, 800 * (idx + 1));
+            });
+        }
+        
+    } catch (e) {
+        console.error('生成评论失败:', e);
+    }
+}
+
+// 添加气泡
+function addBubble(text, type, name) {
+    const stream = document.getElementById('commentary-stream');
+    if (!stream) return;
+    
+    const bubble = document.createElement('div');
+    bubble.className = `commentary-bubble ${type}`;
+    bubble.innerHTML = `
+        <div class="bubble-avatar">${name.split(' ')[0]}</div>
+        <div class="bubble-content">
+            <div class="bubble-name">${name}</div>
+            <div class="bubble-text">${text}</div>
+        </div>
+    `;
+    
+    stream.appendChild(bubble);
+    stream.scrollTop = stream.scrollHeight; // 自动滚动到底部
+    
+    // 限制气泡数量（最多15个）
+    const bubbles = stream.querySelectorAll('.commentary-bubble');
+    if (bubbles.length > 15) {
+        bubbles[0].remove();
+    }
+    
+    // 8-12秒后淡出
+    setTimeout(() => {
+        bubble.style.transition = 'all 0.5s';
+        bubble.style.opacity = '0';
+        bubble.style.transform = 'scale(0.9)';
+        setTimeout(() => bubble.remove(), 500);
+    }, 8000 + Math.random() * 4000);
+}
+
+// 用户发送评论
+function sendUserComment() {
+    const input = document.getElementById('user-comment-input');
+    if (!input) return;
+    
+    const text = input.value.trim();
+    if (!text) return;
+    
+    // 显示用户评论
+    addBubble(text, 'user', '💬 我');
+    input.value = '';
+}
+
+// 拖动功能
+function makeDraggable(element) {
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+    
+    element.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startLeft = element.offsetLeft;
+        startTop = element.offsetTop;
+        element.style.cursor = 'grabbing';
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        element.style.left = (startLeft + e.clientX - startX) + 'px';
+        element.style.top = (startTop + e.clientY - startY) + 'px';
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            element.style.cursor = 'grab';
+        }
+    });
+}
+
+// 初始化拖动
+document.addEventListener('DOMContentLoaded', () => {
+    const floatingControls = document.getElementById('floating-controls');
+    if (floatingControls) {
+        makeDraggable(floatingControls);
+    }
+});

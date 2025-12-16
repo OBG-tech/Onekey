@@ -1,0 +1,128 @@
+# ============================================================
+# 🎬 智能视频分析整合系统 - 依赖包列表
+# ============================================================
+# 生成时间: 2025-12-11
+# Python版本要求: >= 3.8
+# 支持平台: Ubuntu 24.04 LTS / macOS / Windows
+
+# ============================================================
+# 核心视觉处理库 (必需)
+# ============================================================
+opencv-python>=4.8.0          # 视频处理、图像操作
+numpy>=1.24.0                 # 数值计算
+ultralytics>=8.0.0            # YOLOv11 人物检测
+lap>=0.5.12                   # Ultralytics 跟踪器线性分配依赖
+
+# ============================================================
+# AI 分析功能 (可选 - 二选一或两者都装)
+# ============================================================
+# 选项1: 阿里云 Qwen (通义千问)
+openai>=1.0.0                 # OpenAI 兼容接口
+dashscope>=1.14.0             # 阿里云 DashScope SDK (语音识别+多模态)
+
+# 选项2: Anthropic Claude Haiku 4.5 (推荐)
+anthropic>=0.18.0             # Claude API 客户端
+
+# ============================================================
+# 人脸识别 (可选 - 需要时安装)
+# ============================================================
+# insightface>=0.7.3          # 高精度人脸识别 (可选)
+# onnxruntime>=1.16.0         # InsightFace 运行时依赖
+
+# ============================================================
+# 音频处理 (可选 - 语音识别需要)
+# ============================================================
+PyAudio>=0.2.13               # 麦克风录音 (注意大小写)
+kaldiio>=2.18.0               # FireRedASR 特征/kaldi 读写依赖
+kaldi_native_fbank>=1.15      # FireRedASR 特征提取依赖（模块名 kaldi_native_fbank）
+sentencepiece>=0.1.99         # FireRedASR AED tokenizer 依赖
+
+# ============================================================
+# 其他依赖
+# ============================================================
+# 标准库 (无需安装):
+# - threading, time, os, sys, json
+# - pathlib, datetime, collections
+# - dataclasses, typing, enum
+# - subprocess, base64, urllib
+# - argparse, webbrowser, re
+# - http.server, socketserver
+# - queue, tkinter
+
+# ============================================================
+# 🐧 Ubuntu 24.04 LTS 完整安装指南
+# ============================================================
+# 
+# 步骤 1: 安装系统依赖
+# ----------------------
+sudo apt update
+sudo apt install -y python3-pip python3-venv python3-dev
+sudo apt install -y portaudio19-dev python3-pyaudio  # PyAudio 依赖
+sudo apt install -y libgl1-mesa-glx libglib2.0-0      # OpenCV 依赖
+sudo apt install -y ffmpeg                             # 视频处理工具
+
+# 可选: 摄像头支持
+sudo apt install -y v4l-utils
+sudo usermod -a -G video $USER  # 添加当前用户到 video 组
+
+# 
+# 步骤 2: 创建虚拟环境 (推荐)
+# ----------------------
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 
+# 步骤 3: 安装 Python 包
+# ----------------------
+# 基础安装 (仅视频分析):
+pip install --upgrade pip
+pip install opencv-python numpy ultralytics
+
+# 完整安装 (含 Claude AI):
+pip install opencv-python numpy ultralytics anthropic PyAudio
+
+# 或使用 Qwen:
+pip install opencv-python numpy ultralytics openai dashscope PyAudio
+
+# 添加人脸识别 (可选):
+pip install insightface onnxruntime
+
+# 
+# 步骤 4: 验证安装
+# ----------------------
+python3 -c "import cv2; print(f'OpenCV: {cv2.__version__}')"
+python3 -c "import numpy; print(f'NumPy: {numpy.__version__}')"
+python3 -c "from ultralytics import YOLO; print('YOLO OK')"
+
+# 
+# ============================================================
+# 其他平台安装说明
+# ============================================================
+# 
+# macOS 安装:
+# -----------
+brew install portaudio ffmpeg
+pip install -r requirements.txt
+
+# Windows 安装:
+# -------------
+pip install pipwin
+pipwin install pyaudio
+pip install -r requirements.txt
+# 
+# ============================================================
+# 环境变量配置
+# ============================================================
+# 
+# 使用 Qwen (默认):
+#   export DASHSCOPE_API_KEY="sk-your-key"
+# 
+# 使用 Claude Haiku 4.5:
+#   export LLM_PROVIDER="claude"
+#   export ANTHROPIC_API_KEY="sk-ant-your-key"
+# 
+# 可选模型配置:
+#   export LLM_MODEL="claude-3-5-haiku-20241022"
+#   export VISION_MODEL="claude-3-5-haiku-20241022"
+# 
+# ============================================================
