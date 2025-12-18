@@ -4,7 +4,7 @@
 
 两种识别来源:
 1. 用户主动标记 (The Anchor) - 物理按钮/快捷键, 0.5秒意图锚定
-2. AI 自动识别 (Smart Mirror) - 每2分钟切片, Qwen-VL 分析
+2. AI 自动识别 (Smart Mirror) - 每3.5分钟切片, Qwen-VL 分析
 
 输出: LLM 纪录片导演式叙事 (Oeuvre)
 """
@@ -75,6 +75,7 @@ class KeyMoment:
     ai_tagline: str = ""             # AI 短标签（用于贴纸/短标识；可选）
     ai_importance: float = 0.0       # AI 评估的重要性 0-1
     ai_tags: List[str] = field(default_factory=list)  # AI 提取的标签
+    ai_framework_tags: str = ""      # 协作学习框架标签（如[R2]论证、Eng-Flow等）
     analysis: str = ""               # AI 综合分析/总结
 
     # LLM 元信息
@@ -180,10 +181,12 @@ class KeyMomentsManager:
         
         # 🎬 视频帧缓冲区 (用于录制关键时刻前后的视频片段)
         self.frame_buffer: list = []      # 存储 (frame, frame_num, timestamp) 元组
-        # 缓冲区最大保留秒数（需覆盖关键时刻窗口 + 余量）
-        self.buffer_max_seconds = int(max(25, KEY_MOMENT_BEFORE_SECONDS + KEY_MOMENT_AFTER_SECONDS + 10))
-        self.buffer_fps = 30              # 假设的帧率
-        self.buffer_max_frames = self.buffer_max_seconds * self.buffer_fps
+        # 缓冲区最大保留秒数（需覆盖关键时刻窗口 + AI分析延迟 + 余量）
+        # 从60秒增加到120秒，以适应AI分析延迟（约60秒）
+        self.buffer_max_seconds = int(max(120, KEY_MOMENT_BEFORE_SECONDS + KEY_MOMENT_AFTER_SECONDS + 90))
+        self.buffer_fps = 30.0            # 使用编码帧，30fps足够
+        self.buffer_max_frames = int(self.buffer_max_seconds * self.buffer_fps)
+        print(f"   🔧 [BUFFER] Config: max_seconds={self.buffer_max_seconds}, fps={self.buffer_fps}, max_frames={self.buffer_max_frames}, format=JPEG")
         self.buffer_lock = threading.Lock()
         
         # 🔊 音频缓冲区 (用于录制对应的音频片段)
@@ -191,7 +194,7 @@ class KeyMomentsManager:
         self.audio_buffer_lock = threading.Lock()
         
         # AI 分析配置
-        self.ai_interval_seconds = 120  # 2分钟一次切片
+        self.ai_interval_seconds = 210  # 3.5分钟一次切片
         self.last_ai_analysis_time: float = 0
         self.ai_analysis_buffer: List[tuple] = []  # (frame, frame_num, timestamp)
         
@@ -265,6 +268,34 @@ class KeyMomentsManager:
                         continue
                 if upgraded:
                     self._save_moments()
+                
+                # 为历史数据补充tags并保存
+                tags_updated = False
+                for m in self.moments:
+                    # 🏷️ 自动生成tags（如果不存在）
+                    if not m.ai_tags or len(m.ai_tags) == 0:
+                        import re
+                        text_for_tags = m.ai_tagline or m.ai_description or m.transcript or ""
+                        # 移除emoji
+                        clean_text = re.sub(r'[😀-🙏💀-🛿🎀-🏿🐀-🦿🌀-🗿⚀-⛿✀-➿]', '', text_for_tags)
+                        # 按标点和空格分割
+                        clean_text = re.sub(r'[，。！？、：；""''（）【】\s]+', '|', clean_text)
+                        words = [w.strip() for w in clean_text.split('|') if w.strip()]
+                        
+                        # 过滤：只保留2-8字的短语
+                        stopwords = {'的', '了', '和', '与', '在', '是', '有', '这', '那', '就', '不', '也', '都', '还', '从', '到'}
+                        filtered = [w for w in words if 2 <= len(w) <= 8 and w not in stopwords]
+                        
+                        tags = filtered[:3]
+                        if not tags:
+                            tags = []
+                        m.ai_tags = tags
+                        tags_updated = True
+                
+                if tags_updated:
+                    print(f"   🏷️ 为历史数据补充了tags")
+                    self._save_moments()
+                
                 print(f"   已加载 {len(self.moments)} 个历史关键时刻")
             except Exception as e:
                 print(f"   ⚠️ 加载历史数据失败: {e}")
@@ -503,11 +534,11 @@ class KeyMomentsManager:
 
     @staticmethod
     def _extract_detail_description(body: str) -> str:
-        """从正文中抽取“详细描述”段落（用于卡片展示，更信息密集）。"""
+        """从正文中抽取"详细描述"段落（用于卡片展示，更信息密集）。"""
         if not body:
             return ""
         lines = [ln.strip() for ln in body.splitlines()]
-        # 支持“详细描述：/详细描述:”两种分隔
+        # 支持"详细描述：/详细描述:"两种分隔
         start = None
         for i, ln in enumerate(lines):
             if ln.startswith("详细描述：") or ln.startswith("详细描述:"):
@@ -539,11 +570,39 @@ class KeyMomentsManager:
                     "证据摘录:",
                     "标签：",
                     "标签:",
+                    "卡片摘要：",
+                    "卡片摘要:",
                 )
             ):
                 break
             out.append(ln)
         return " ".join(out).strip()
+    
+    @staticmethod
+    def _extract_card_summary(body: str) -> str:
+        """从正文中抽取\"卡片摘要\"（20-25字的简短版本）。"""
+        if not body:
+            return ""
+        lines = [ln.strip() for ln in body.splitlines()]
+        for ln in lines:
+            if ln.startswith("卡片摘要：") or ln.startswith("卡片摘要:"):
+                txt = ln.split("：", 1)[-1].split(":", 1)[-1].strip()
+                return txt
+        return ""
+    
+    @staticmethod
+    def _extract_framework_tags(body: str) -> str:
+        """从正文中抽取'分析框架标签'段落"""
+        if not body:
+            return ""
+        lines = [ln.strip() for ln in body.splitlines()]
+        for i, ln in enumerate(lines):
+            if ln.startswith("分析框架标签：") or ln.startswith("分析框架标签:") or ln.startswith("框架标签："):
+                # 提取内容（去掉前缀）
+                content = ln.split("：", 1)[-1].split(":", 1)[-1].strip()
+                return content
+        return ""
+
 
     def _run_text_llm(self, prompt: str, system: str = "", model_override: str = None,
                       temperature: float = 0.3, max_tokens: int = 1500) -> str:
@@ -765,11 +824,16 @@ class KeyMomentsManager:
         except Exception:
             return []
 
-    def _save_video_clip_from_provided_frames(self, moment_id: str, provided_frames: List[Dict[str, Any]], frame_number: int = 0, frame=None) -> tuple:
+    def _save_video_clip_from_provided_frames(self, moment_id: str, provided_frames: List[Dict[str, Any]], 
+                                                frame_number: int = 0, frame=None, 
+                                                center_timestamp: Optional[float] = None) -> tuple:
         """用调用方提供的一段帧序列生成视频片段。
 
         主要用于“5分钟切片分析”场景：frame_buffer 只保留几十秒，旧时间点会过期。
         provided_frames 的元素格式为 {"frame": np.ndarray, "frame_number": int, "ts": float}。
+        
+        Args:
+            center_timestamp: 如果提供，则只使用该时间戳前后的帧（默认±10秒）
         """
         if not provided_frames:
             return None, 0
@@ -791,6 +855,27 @@ class KeyMomentsManager:
             return None, 0
 
         clip_frames.sort(key=lambda x: x[2])
+        
+        # 🎯 如果提供了center_timestamp，只保留该时间前后的帧
+        if center_timestamp is not None:
+            import os
+            window_before = float(os.environ.get("MULTIMODAL_BEFORE_SECONDS", "15"))
+            window_after = float(os.environ.get("MULTIMODAL_AFTER_SECONDS", "15"))
+            
+            start_ts = center_timestamp - window_before
+            end_ts = center_timestamp + window_after
+            
+            filtered_frames = [f for f in clip_frames if start_ts <= f[2] <= end_ts]
+            print(f"   🔍 [视频帧筛选] 原始帧数: {len(clip_frames)}, 筛选后: {len(filtered_frames)}, 窗口: 前{window_before}s + 后{window_after}s = {window_before + window_after}s")
+            if filtered_frames:
+                clip_frames = filtered_frames
+            else:
+                # 如果过滤后为空，可能是时间窗太窄或帧太少，尝试找最近的帧
+                closest_frame = min(clip_frames, key=lambda f: abs(f[2] - center_timestamp))
+                clip_frames = [closest_frame]
+            
+            if len(clip_frames) < 2: # 确保至少有两帧才能形成视频
+                return None, 0
 
         # 准备写入视频
         video_filename = f"{moment_id}.mp4"
@@ -803,8 +888,8 @@ class KeyMomentsManager:
 
             time_span = float(clip_frames[-1][2]) - float(clip_frames[0][2])
             est_fps = (len(clip_frames) / time_span) if time_span > 1e-6 else 10.0
-            # 切片帧可能很稀疏：不要强行抬到 3fps，否则会把“真实时间窗”压缩成更短视频。
-            est_fps = min(max(est_fps, 1.0), 30.0)
+            # 提高最小fps到5，最大到60，与手动标记保持一致，确保画质流畅
+            est_fps = min(max(est_fps, 5.0), 60.0)
 
             video_duration = len(clip_frames) / est_fps
 
@@ -813,8 +898,12 @@ class KeyMomentsManager:
                 '-f', 'rawvideo', '-pix_fmt', 'bgr24',
                 '-s', f'{w}x{h}', '-r', f'{est_fps:.3f}',
                 '-i', 'pipe:0',
-                '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
-                '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+                '-c:v', 'libx264',
+                '-preset', 'slow',  # slow提供更好的压缩质量（比medium慢但质量更高）
+                '-crf', '15',  # 降低到15获得更高画质（0-51，越小越好，18是默认高质量）
+                '-b:v', '5M',  # 明确设置码率为5Mbps，确保高质量
+                '-pix_fmt', 'yuv420p',
+                '-movflags', '+faststart',
                 str(video_path)
             ]
             process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -887,10 +976,19 @@ class KeyMomentsManager:
             frame: 当前帧 (numpy array)
             frame_number: 帧号
         """
+        import cv2
+        # 使用 JPEG 压缩存储以节省内存 (1280x720 raw=2.7MB, jpeg~=200KB)
+        success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        if not success:
+            return
+            
         with self.buffer_lock:
-            self.frame_buffer.append((frame.copy(), frame_number, time.time()))
+            # 存储格式: (jpeg_buffer, frame_num, timestamp)
+            self.frame_buffer.append((buffer, frame_number, time.time()))
             # 保持缓冲区大小在限制内
             while len(self.frame_buffer) > self.buffer_max_frames:
+                if len(self.frame_buffer) % 500 == 0:
+                     print(f"   🔧 [BUFFER] Popping frame! Size={len(self.frame_buffer)}, Max={self.buffer_max_frames}")
                 self.frame_buffer.pop(0)
     
     def add_audio_frame_to_buffer(self, audio_chunk: bytes, timestamp: float = None):
@@ -1264,18 +1362,77 @@ class KeyMomentsManager:
                 print(f"   ⚠️ 帧缓冲区不足，无法生成视频 ({len(self.frame_buffer)} 帧)")
                 return None, 0
             
+            # 🔍 调试：打印buffer状态
+            if self.frame_buffer:
+                buffer_start_ts = self.frame_buffer[0][2]
+                buffer_end_ts = self.frame_buffer[-1][2]
+                buffer_span = buffer_end_ts - buffer_start_ts
+                print(f"   🔍 [DEBUG] Buffer状态: {len(self.frame_buffer)} 帧, 时间跨度: {buffer_span:.1f}秒")
+                print(f"   🔍 [DEBUG] Buffer范围: [{buffer_start_ts:.2f}, {buffer_end_ts:.2f}]")
+            
             # 获取以 center_timestamp 为中心的帧（默认用当前时刻）
             center_ts = float(center_timestamp) if isinstance(center_timestamp, (int, float)) else time.time()
             start_ts = center_ts - float(clip_duration_before)
             end_ts = center_ts + float(clip_duration_after)
-            clip_frames = []
-            for frame, frame_num, ts in self.frame_buffer:
-                if start_ts <= ts <= end_ts:
-                    clip_frames.append((frame, frame_num, ts))
             
-            if len(clip_frames) < 10:
-                # 如果不够，使用最近一段缓冲区兜底（避免空视频）
-                clip_frames = list(self.frame_buffer[-300:])  # 最多300帧约10秒
+            print(f"   🔍 [DEBUG] 目标窗口: [{start_ts:.2f}, {end_ts:.2f}], 中心: {center_ts:.2f}")
+            print(f"   🔍 [DEBUG] 窗口宽度: {clip_duration_before:.1f}s (前) + {clip_duration_after:.1f}s (后) = {clip_duration_before + clip_duration_after:.1f}s")
+            
+            clip_frames = []
+            for frame_buf, frame_num, ts in self.frame_buffer:
+                if start_ts <= ts <= end_ts:
+                    # 解码 JPEG
+                    frame = cv2.imdecode(frame_buf, cv2.IMREAD_COLOR)
+                    if frame is not None:
+                        clip_frames.append((frame, frame_num, ts))
+            
+            print(f"   🔍 [DEBUG] 筛选结果: 收集到 {len(clip_frames)} 帧")
+        
+        if len(clip_frames) == 0:
+            # timestamp不在buffer范围（历史时刻已过期），使用当前时间重试
+            print(f"   ⚠️ 历史timestamp不在buffer范围，使用当前时间重新筛选")
+            center_ts = time.time()
+            start_ts = center_ts - float(clip_duration_before)
+            end_ts = center_ts + float(clip_duration_after)
+            
+            print(f"   🔍 [RETRY] 新窗口: [{start_ts:.2f}, {end_ts:.2f}], 中心: {center_ts:.2f}")
+            
+            # 先收集当前可用的帧
+            for frame_buf, frame_num, ts in self.frame_buffer:
+                if start_ts <= ts <= end_ts:
+                    # 解码 JPEG
+                    frame = cv2.imdecode(frame_buf, cv2.IMREAD_COLOR)
+                    if frame is not None:
+                        clip_frames.append((frame, frame_num, ts))
+            
+            print(f"   🔍 [RETRY] 初步筛选结果: 收集到 {len(clip_frames)} 帧")
+            
+            # 如果需要后续帧，等待buffer收集
+            if clip_duration_after > 0 and len(clip_frames) < 1800:
+                wait_seconds = float(clip_duration_after)
+                print(f"   ⏳ 等待 {wait_seconds:.0f}秒 收集后续帧...")
+                time.sleep(wait_seconds)
+                
+                # 重新筛选，包含新收集的帧
+                clip_frames = []
+                with self.buffer_lock:
+                    for frame_buf, frame_num, ts in self.frame_buffer:
+                        if start_ts <= ts <= end_ts:
+                            frame = cv2.imdecode(frame_buf, cv2.IMREAD_COLOR)
+                            if frame is not None:
+                                clip_frames.append((frame, frame_num, ts))
+                
+                print(f"   🔍 [RETRY] 等待后筛选结果: 收集到 {len(clip_frames)} 帧")
+        
+        if len(clip_frames) < 10:
+            # 如果仍然不够（buffer本身太小），使用最近一段缓冲区兜底
+            print(f"   ⚠️ 筛选帧数仍然不足 ({len(clip_frames)} < 10)，使用最近300帧兜底")
+            # 同样需要解码
+            clip_frames = []
+            for frame_buf, frame_num, ts in list(self.frame_buffer)[-300:]:
+                frame = cv2.imdecode(frame_buf, cv2.IMREAD_COLOR)
+                if frame is not None:
+                    clip_frames.append((frame, frame_num, ts))
         
         if not clip_frames:
             return None, 0
@@ -1306,8 +1463,12 @@ class KeyMomentsManager:
                     '-f', 'rawvideo', '-pix_fmt', 'bgr24',
                     '-s', f'{w}x{h}', '-r', str(int(actual_fps)),
                     '-i', 'pipe:0',
-                    '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
-                    '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+                    '-c:v', 'libx264',
+                    '-preset', 'slow',  # slow提供更好的压缩质量
+                    '-crf', '15',  # 高画质（与LLM识别保持一致）
+                    '-b:v', '5M',  # 5Mbps码率确保高质量
+                    '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart',
                     str(video_path)
                 ]
                 
@@ -1495,29 +1656,18 @@ class KeyMomentsManager:
         except Exception:
             pass
 
-        # 🎬 立即保存前若干秒的视频片段（快速反馈）
-        video_path, video_duration = self._save_video_clip(
-            moment_id,
-            clip_duration_before=float(KEY_MOMENT_BEFORE_SECONDS),
-            frame_number=frame_number,
-            center_timestamp=timestamp,
-        )
-        
-        # 备注兜底：如果用户没写备注，先用短转写填充，避免前端卡片显示 No description
-        effective_user_note = (user_note or "").strip() or (transcript or "").strip()
-
-        # 创建关键时刻
+        # 创建关键时刻 (视频路径暂空，由后台线程生成)
         moment = KeyMoment(
             id=moment_id,
             timestamp=timestamp,
             frame_number=frame_number,
             source=MomentSource.USER_ANCHOR.value,
             frame_path=str(frame_path),
-            video_path=video_path or "",
-            video_duration=video_duration,
+            video_path="",  # 暂时为空
+            video_duration=0.0,
             time_str=time_str,
             duration_seconds=duration,
-            user_note=effective_user_note,
+            user_note=user_note,
             transcript=transcript,  # 保存语音转文字
             person_count=person_count,
             track_ids=track_ids or []
@@ -1527,29 +1677,44 @@ class KeyMomentsManager:
         self.stats["user_anchors"] += 1
         self.stats["total_moments"] += 1
         
-        # 保存
+        # 立即保存一次，确保前端能立即刷出卡片并触发特效
         self._save_moments()
         
         print(f"🔴 用户标记关键时刻: {time_str} (帧 {frame_number})")
-        if video_path:
-            print(f"   🎬 视频 (前{KEY_MOMENT_BEFORE_SECONDS:.0f}秒): {video_duration:.1f}秒")
         if user_note:
             print(f"   📝 备注: {user_note}")
         if transcript:
             print(f"   🎤 实时语音片段: {transcript[:50]}...")
         
-        # 🎬 启动后台线程，等待 after 秒后生成包含后段的完整视频
-        # AI分析和语音转文字将在完整视频(含音频)生成后自动触发
-        def delayed_video_extension():
+        # 🎬 启动后台线程: 1.保存初始视频 -> 2.等待扩展 -> 3.触发AI分析
+        def async_video_processing():
+            # 1. 保存前 KEY_MOMENT_BEFORE_SECONDS 秒的视频片段
+            try:
+                video_path, video_duration = self._save_video_clip(
+                    moment_id,
+                    clip_duration_before=float(KEY_MOMENT_BEFORE_SECONDS),
+                    frame_number=frame_number,
+                    center_timestamp=timestamp,
+                )
+                
+                if video_path:
+                    print(f"   🎬 初始视频已生成 (前{KEY_MOMENT_BEFORE_SECONDS:.0f}秒): {video_duration:.1f}秒")
+                    moment.video_path = video_path
+                    moment.video_duration = video_duration
+                    self._save_moments() # 更新视频路径
+            except Exception as e:
+                print(f"   ❌ 初始视频生成失败: {e}")
+
+            # 2. 等待 after 秒后生成包含后段的完整视频
+            print(f"   ⏳ {KEY_MOMENT_AFTER_SECONDS:.0f}秒后将扩展完整视频并进行AI分析...")
             time.sleep(float(KEY_MOMENT_AFTER_SECONDS))  # 等待收集后续帧
             self._extend_video_with_after_frames(moment_id, timestamp, frame.copy())
         
-        extend_thread = threading.Thread(target=delayed_video_extension, daemon=True)
-        extend_thread.start()
-        print(f"   ⏳ {KEY_MOMENT_AFTER_SECONDS:.0f}秒后将生成完整视频并进行AI分析...")
+        processing_thread = threading.Thread(target=async_video_processing, daemon=True)
+        processing_thread.start()
         
         return moment
-    
+
     def _extend_video_with_after_frames(self, moment_id: str, original_timestamp: float, frame=None):
         """
         延迟调用：合并标记时刻前后各10秒的视频
@@ -1561,34 +1726,56 @@ class KeyMomentsManager:
         """
         import cv2
         
+        print(f"   🎬 [完整视频扩展] 开始处理 moment_id={moment_id}, timestamp={original_timestamp:.2f}")
+        
         try:
             with self.buffer_lock:
                 before_s = float(KEY_MOMENT_BEFORE_SECONDS)
                 after_s = float(KEY_MOMENT_AFTER_SECONDS)
 
+                # 诊断日志
+                print(f"   🔧 [DEBUG] 帧缓冲区总大小: {len(self.frame_buffer)} 帧")
+                if len(self.frame_buffer) > 0:
+                    buffer_start_ts = self.frame_buffer[0][2]
+                    buffer_end_ts = self.frame_buffer[-1][2]
+                    buffer_span = buffer_end_ts - buffer_start_ts
+                    print(f"   🔧 [DEBUG] 缓冲区时间跨度: {buffer_span:.1f}秒")
+                    print(f"   🔧 [DEBUG] 目标窗口: [{original_timestamp - before_s:.1f}, {original_timestamp + after_s:.1f}] = {before_s + after_s:.0f}秒")
+                
                 # 获取标记时刻前后窗口的帧
                 clip_frames = []
-                for frame, frame_num, ts in self.frame_buffer:
+                for frame_buf, frame_num, ts in self.frame_buffer:
                     if original_timestamp - before_s <= ts <= original_timestamp + after_s:
-                        clip_frames.append((frame, frame_num, ts))
+                        # 解码 JPEG
+                        frame = cv2.imdecode(frame_buf, cv2.IMREAD_COLOR)
+                        if frame is not None:
+                            clip_frames.append((frame, frame_num, ts))
+                
+                print(f"   🔧 [DEBUG] 窗口内收集到帧数: {len(clip_frames)} 帧")
                 
                 if len(clip_frames) < 30:  # 至少需要1秒
-                    print(f"   ⚠️ 帧不足，无法扩展视频 ({len(clip_frames)} 帧)")
+                    print(f"   ⚠️ 帧不足，无法扩展视频 ({len(clip_frames)} 帧). Buffer Range: {buffer_start_ts:.1f}-{buffer_end_ts:.1f}, Target: {original_timestamp - before_s:.1f}-{original_timestamp + after_s:.1f}")
                     return
             
             # 生成新视频路径
             video_filename = f"{moment_id}.mp4"
             video_path = self.moments_dir / video_filename
             
-            # 计算帧率
+            # 计算帧率和视频时长
             if len(clip_frames) >= 2:
                 time_span = clip_frames[-1][2] - clip_frames[0][2]
                 actual_fps = len(clip_frames) / time_span if time_span > 0 else 30
-                actual_fps = min(max(actual_fps, 15), 60)
+                # 不限制最小FPS，保持真实时间跨度
+                actual_fps = min(max(actual_fps, 5), 60)  # 最小5fps，保持30秒视频完整
+                print(f"   🔧 [DEBUG] 实际时间跨度: {time_span:.2f}秒")
+                print(f"   🔧 [DEBUG] 计算FPS: {actual_fps:.1f}")
+                # 使用实际时间跨度作为视频时长，而不是计算值
+                video_duration = time_span
             else:
                 actual_fps = 30
+                video_duration = len(clip_frames) / actual_fps
             
-            video_duration = len(clip_frames) / actual_fps
+            print(f"   🔧 [DEBUG] 视频时长: {video_duration:.2f}秒 ({len(clip_frames)}帧 @ {actual_fps:.1f}fps)")
             
             # 获取帧尺寸
             first_frame = clip_frames[0][0]
@@ -1673,12 +1860,14 @@ class KeyMomentsManager:
         self.frame_count = frame_number
         current_time = time.time()
         
-        # 检查是否需要进行 AI 分析 (每2分钟)
+        # 检查是否需要进行 AI 分析 (每3.5分钟)
         if current_time - self.last_ai_analysis_time >= self.ai_interval_seconds:
             if person_count > 0:  # 只在有人时分析
+                # ⚠️ 关键：先更新时间戳再触发分析，确保切片之间无遗漏
+                # 即使处理耗时30秒，下一次也是从本次的210秒后触发，而非处理完成后的210秒
+                self.last_ai_analysis_time = current_time
                 # 异步进行 AI 分析
                 self._trigger_ai_analysis(frame.copy(), frame_number, person_count, track_ids or [])
-                self.last_ai_analysis_time = current_time
     
     def _trigger_ai_analysis(self, frame, frame_number: int, 
                              person_count: int, track_ids: List[int]):
@@ -1847,8 +2036,8 @@ class KeyMomentsManager:
             
             result = json.loads(result_text)
             
-            # 如果是关键时刻，记录
-            if result.get("is_key_moment", False) and result.get("importance", 0) > 0.5:
+            # 如果是关键时刻，记录（阈值0.35，提高灵敏度）
+            if result.get("is_key_moment", False) and result.get("importance", 0) > 0.35:
                 self._record_ai_moment(
                     frame=frame,
                     frame_number=frame_number,
@@ -1911,24 +2100,55 @@ class KeyMomentsManager:
         self.stats["total_moments"] += 1
         self._save_moments()
 
-        # 为 AI 识别的关键时刻也生成视频片段（并触发音频→ASR→多模态分析）
+        # 🎬 与手动标记保持一致: 先保存前15秒视频，然后延迟生成完整30秒视频
+        # 第一阶段: 保存前15秒视频
+        print(f"   🎬 [AI视频] 第一阶段: 开始保存前{KEY_MOMENT_BEFORE_SECONDS:.0f}秒视频...")
         video_path, video_duration = self._save_video_clip(
             moment_id=moment_id,
-            clip_duration_before=10.0,
+            clip_duration_before=float(KEY_MOMENT_BEFORE_SECONDS),  # 15秒
             frame_number=frame_number,
-            frame=frame
+            frame=frame,
+            center_timestamp=timestamp  # 使用AI检测时刻作为中心
         )
         if video_path:
             moment.video_path = video_path
             moment.video_duration = video_duration
             self._save_moments()
+            print(f"   ✅ [AI视频] 第一阶段完成: {video_duration:.1f}秒视频已保存")
         else:
             print(f"   ⚠️ AI关键时刻视频生成失败: {moment_id}")
+            return  # 如果第一阶段失败，不继续
+        
+        # 第二阶段: 启动后台线程，等待15秒后生成包含后段的完整视频
+        print(f"   🎬 [AI视频] 第二阶段: 启动延迟线程，{KEY_MOMENT_AFTER_SECONDS:.0f}秒后生成完整视频")
+        # 第二阶段: 启动后台线程，等待15秒后生成包含后段的完整视频
+        print(f"   🎬 [AI视频] 第二阶段: 启动延迟线程，{KEY_MOMENT_AFTER_SECONDS:.0f}秒后生成完整视频")
+        
+        # 使用闭包捕获当前所需变量
+        def delayed_video_extension(mid, ts, frm):
+            try:
+                print(f"   ⏰ [AI视频延迟] 线程开始 (moment_id={mid}), 等待 {KEY_MOMENT_AFTER_SECONDS:.0f} 秒...")
+                time.sleep(float(KEY_MOMENT_AFTER_SECONDS))
+                print(f"   🎬 [AI视频延迟] 唤醒! 开始生成完整视频: {mid}")
+                self._extend_video_with_after_frames(mid, ts, frm)
+            except Exception as e:
+                print(f"   ❌ [AI视频延迟] 线程异常: {e}")
+        
+        # 传递参数避免闭包变量捕获问题
+        extend_thread = threading.Thread(
+            target=delayed_video_extension, 
+            args=(moment_id, timestamp, frame.copy()),
+            daemon=True
+        )
+        extend_thread.start()
+        print(f"   ✅ [AI视频] 延迟线程已启动 (thread_id={extend_thread.ident}, moment_id={moment_id})")
         
         print(f"🤖 AI 识别关键时刻: {time_str}")
         print(f"   📝 {description[:60]}...")
         print(f"   🏷️ 标签: {', '.join(tags[:3])}")
         print(f"   ⭐ 重要性: {importance:.2f}")
+        print(f"   🎬 视频 (前{KEY_MOMENT_BEFORE_SECONDS:.0f}秒): {video_duration:.1f}秒")
+        print(f"   ⏳ {KEY_MOMENT_AFTER_SECONDS:.0f}秒后将生成完整视频并进行AI分析...")
     
     def _process_video_with_multimodal_analysis(self, moment_id: str, video_path: str, frame=None):
         """从完整视频中提取音频并进行语音转文字，然后进行多模态AI分析
@@ -2186,14 +2406,12 @@ class KeyMomentsManager:
                 
                 dashscope.api_key = self.api_key
                 
-                print(f"   🎤 正在进行语音转文字 (文件大小: {audio_path.stat().st_size} bytes, Qwen)...")
+                print(f"   🎤 正在进行语音转文字 (文件大小: {audio_path.stat().st_size} bytes, DashScope)...")
                 
-                # 优先尝试 qwen-audio-turbo (用户指定的 Qwen 模型)
+                # ASR模型优先级列表（只使用已确认可用的模型）
                 models_to_try = [
-                    'qwen-audio-turbo',            # Qwen Audio 模型 (用户指定)
-                    'paraformer-realtime-v2',      # 实时ASR使用的模型
-                    'paraformer-v2',               # 批量转录模型
-                    'paraformer-realtime-8k-v2',   # 8k采样率版本
+                    'paraformer-realtime-v2',      # 实时ASR模型（主力）
+                    'paraformer-realtime-8k-v2',   # 8k采样率版本（备用）
                 ]
                 
                 result = None
@@ -2222,9 +2440,10 @@ class KeyMomentsManager:
                             break
                         elif result and hasattr(result, 'status_code'):
                             if result.status_code == 200:
-                                successful_model = model_name
-                                print(f"   ⚠️ 模型 {model_name} 返回成功但结果为空")
-                                break
+                                # 状态成功但结果为空，尝试下一个模型
+                                print(f"   ⚠️ 模型 {model_name} 返回成功但结果为空，尝试下一个模型")
+                                last_error = f"模型 {model_name} 无识别结果"
+                                continue  # 继续尝试下一个模型
                             else:
                                 error_msg = getattr(result, 'message', f'Status {result.status_code}')
                                 last_error = error_msg
@@ -2320,7 +2539,7 @@ class KeyMomentsManager:
             except ImportError as e:
                 print(f"   ⚠️ dashscope.audio.asr 未安装: {e}")
             except Exception as e:
-                print(f"   ⚠️ Recognition API 异常: {e}")
+                print(f"   ⚠️ 语音转文字异常: {e}")
                 import traceback
                 traceback.print_exc()
             
@@ -2328,6 +2547,12 @@ class KeyMomentsManager:
             # 所有方法都失败了
             print(f"   ⚠️ 语音转文字所有方法都失败")
             print(f"   💡 建议: 检查 DashScope API 密钥权限或模型可用性")
+            
+            # 🎯 回退方案：使用实时ASR的历史转写（如果存在）
+            if context_transcript and len(context_transcript.strip()) > 0:
+                print(f"   ✅ 使用上下文转写作为回退方案 ({len(context_transcript)}字)")
+                return context_transcript
+            
             print(f"   🔄 系统将使用纯视觉 AI 分析")
             return ""
         
@@ -2368,22 +2593,21 @@ class KeyMomentsManager:
             marker = "=== transcript_context ==="
             if marker in context_excerpt:
                 context_excerpt = context_excerpt.rsplit(marker, 1)[1].strip()
-
             # 截断时保留尾部（更靠近按键时刻/窗口），避免截到旧内容
             if len(context_excerpt) > 3500:
                 context_excerpt = "[...context truncated...]\n" + context_excerpt[-3500:]
 
-            prompt = f"""你是一名“体育赛事解说员 + 协作学习观察员”的合体：风趣会吐槽，但绝不胡编。
+            prompt = f"""你是一面"智能镜子"，忠实记录创客马拉松/Hackathon现场发生的事情。
 
 场景说明：这是创客马拉松 / Hackathon 现场（做原型、写代码、调试、讨论方案）。
 
-硬性要求（非常重要）：
-1) 只能根据【画面】与【文本】做判断，禁止编造对话/互动；没有证据就写“无法确定”。
-2) ⚠️ 关键：如果【本片段ASR】显示“(无语音)”且画面中没有明显的互动/动作，请直接在标签写“无明显活动”，详细描述写“现场安静，未检测到明显活动。”，不要强行编造剧情。
-3) 输出中文，口吻像直播解说：轻松、机灵、可轻吐槽，但不尬、不油；语境是创客马拉松/Hackathon。
-    - 幽默只能来自“措辞/比喻/节奏”，不得新增事实。
-4) 先输出一句【标签】（10~14 个字），用于打印在贴纸上：像热搜标题一样一眼懂发生了什么；可以带 0-1 个表情符号。
-5) “点开后”要看到：你如何从【历史上下文】里定位到按键原因相关的内容（给出 1~3 条带时间戳的原文摘录）。
+核心原则 - 镜子观察法：
+1) **忠实反映**：像镜子一样客观描述画面中看到的内容和ASR听到的对话，不加主观评价。
+2) **具体可见**：描述具体的动作、对话、表情、物品，而非抽象概念（如"深度讨论"→"两人指着屏幕交谈"）。
+3) **有什么说什么**：看到多少人写多少人、听到什么对话引用原文、看到什么动作描述动作。
+4) **全文定位**：⚠️ 必须基于【历史上下文】的完整转写理解当前时刻在整个活动流程中的位置，说明前面发生了什么、现在在做什么、这个时刻的意义。
+5) **无法确定就明说**：如果画面模糊、ASR为空、无法判断，直接写"画面未显示明确活动"或"无语音"。
+6) ⚠️ 如果【本片段ASR】为"(无语音)"且画面无明显活动，写"画面无明显活动"即可，不要猜测编造。
 
 【按键原因/备注】{user_note or "(无)"}
 
@@ -2393,11 +2617,17 @@ class KeyMomentsManager:
 【本片段ASR（可能有噪声）】
 {transcript_clean or "(无语音)"}
 
-输出格式严格如下（照抄标题；每段可多行）：
-标签：<10~14字，可带0-1个表情符号>
-详细描述：<2~3句，创客马拉松“赛事解说”风；短句为主；允许1句轻吐槽/俏皮比喻；总字数尽量≤120；可带1-3个轻量表情符号>
-上下文定位：<1句，说明你在历史上下文里找到了哪些与按键原因相关的线索；若找不到就写“未在上下文中找到明确对应内容”>
-证据摘录：<1~3条，尽量原样引用历史上下文或ASR里带时间戳的句子；如果没有，就写“无”>
+⚠️ **优先级原则**：
+- 语音内容 > 画面内容（语音才是核心活动记录）
+- 如果ASR有内容，必须以语音为主线描述，画面作为补充
+- 如果ASR为空，才纯粹描述画面
+
+输出格式严格如下：
+标签：<10~14字，必须包含：人数+具体动作/事件（优先基于语音内容）+关键对象；可带0-1个相关表情符号>
+详细描述：<2~3句，**优先描述语音内容**：①如果有ASR，先引用对话原文（中文或英文）②再补充画面：人数、布局、动作 ③可见物品；使用短句；总字数≤120；禁用"热烈""深度""火花"等抽象词>
+分析框架标签：<如果对话/行为符合协作学习编码框架，标注对应标签，如"[R2]论证推理"、"Eng-Flow"、"Soc-Help互助"；若无明显框架行为，写"无框架标签">
+上下文定位：<1~2句，**基于【历史上下文】的完整转写**，说明：①这个时刻之前发生了什么 ②当前在整个活动流程的哪个阶段 ③这个时刻的作用/意义；若历史上下文为空则写"无历史上下文">
+证据摘录：<1~3条，原样引用ASR或历史上下文，保留时间戳；若无则写"无">
 """
 
             ai_analysis = self._run_vision_llm(
@@ -2412,7 +2642,7 @@ class KeyMomentsManager:
             use_text_postprocess = os.environ.get("KEY_MOMENT_TEXT_POSTPROCESS", "1").strip().lower() in {"1", "true", "yes"}
             final_text = ai_analysis
             if use_text_postprocess:
-                refine_prompt = f"""你是资深体育赛事解说员：机灵会吐槽，但绝不胡编。
+                refine_prompt = f"""你是一面智能镜子，客观整理视觉模型的输出。
 
 场景说明：这是创客马拉松 / Hackathon 现场（做原型、写代码、调试、讨论方案）。
 
@@ -2424,8 +2654,8 @@ class KeyMomentsManager:
 硬性要求：
 - 只能使用【历史上下文】与【ASR】里的文字作为“证据摘录”；摘录必须尽量原样、带时间戳。
 - 对画面只能描述你“从视觉解读里能确定的部分”；不确定就写“无法确定”。
-- 输出中文，解说风格：机灵、节奏感强、可轻吐槽，但不油。
-- 幽默只能体现在措辞，不得新增事实或暗示没发生的对话。
+- 输出中文，客观描述风格：忠实反映画面和对话，不添加主观评价。
+- 描述具体可见内容，不使用模糊抽象词汇。
 
 【按键原因/备注】{user_note or "(无)"}
 
@@ -2438,11 +2668,18 @@ class KeyMomentsManager:
 【本片段ASR（可能有噪声）】
 {transcript_clean or "(无语音/未识别)"}
 
-输出格式严格如下（照抄标题；每段可多行）：
-标签：<10~14字，像热搜标题；可带0-1个表情符号>
-详细描述：<2~3句，创客马拉松“赛事解说”风；短句为主；允许1句轻吐槽/俏皮比喻；总字数尽量≤120；可带1-3个轻量表情符号>
-上下文定位：<1句，说明你在历史上下文里找到了哪些与按键原因相关的线索；若找不到就写“未在上下文中找到明确对应内容”>
-证据摘录：<1~3条，必须来自历史上下文或ASR，尽量原样；如果没有，就写“无”>
+⚠️ **优先级原则**：
+- 语音内容 > 画面内容（语音才是核心活动记录）
+- 如果ASR有内容，必须以语音为主线描述
+- 如果ASR为空，才描述画面
+
+输出格式严格如下：
+标签：<10~14字，必须基于语音内容或画面动作；可带0-1个表情符号>
+卡片摘要：<**必须25-30字**（不含表情符号），低于25字不合格！必须用完整句子客观描述对话核心主题，例："讨论3D打印技术如何有效降低创客创作门槛"（25字）、"深入分析消费主义社会对创客群体的长期影响"（25字）、"全面探讨虚拟游戏体验与现实创作成就感的本质差异"（28字）；禁止"探讨实际创作差异"（9字，太短❌）、"参与者面向镜头阐述愿景"（画面动作❌）、"脑洞炸裂"（主观❌）；可带1-2个表情符号>
+详细描述：<**必须3~5句完整句子**，总字数**必须达到150~250字**。优先详细引用ASR对话（带引号），然后描述画面：具体人数、位置、动作、表情、物品。使用连贯叙述风格，像在给盲人讲述场景。禁用抽象词汇>
+分析框架标签：<如果对话/行为符合协作学习编码框架（如[R2]论证、Eng-Flow、Soc-Help等），标注对应标签；若无明显框架行为，写"无框架标签">
+上下文定位：<1~2句，**基于【历史上下文】的完整转写**，说明：①这个时刻之前发生了什么 ②当前在整个活动流程的哪个阶段 ③这个时刻的作用/意义；若历史上下文为空则写"无历史上下文">
+证据摘录：<1~3条，原样引用ASR或历史上下文，保留时间戳；若无则写"无">
 """
                 try:
                     final_text = self._run_text_llm(
@@ -2461,16 +2698,24 @@ class KeyMomentsManager:
                 if moment.id == moment_id:
                     tagline, body = self._extract_tagline(final_text)
                     detail_desc = self._extract_detail_description(body)
-                    # 卡片展示更希望“信息密集”，因此优先用详细描述；短标签单独存
-                    new_description = (detail_desc or "").strip() or (tagline or "").strip()
+                    card_summary = self._extract_card_summary(body)  # 提取卡片摘要
+                    framework_tags = self._extract_framework_tags(body)
+                    
+                    # 优先使用card_summary（20-25字）显示在卡片上
+                    #  回退到detail_desc或tagline
+                    new_description = (card_summary or "").strip() or (detail_desc or "").strip() or (tagline or "").strip()
 
                     moment.ai_tagline = (tagline or "").strip()
+            
+                    moment.ai_framework_tags = framework_tags
                     moment.analysis = body
 
                     # 防止“降级”：不要用很短的新文本覆盖已有的高信息密度描述
                     existing_desc = (moment.ai_description or "").strip()
                     existing_is_placeholder = existing_desc in {"", "AI处理中…", "AI分析失败"}
-                    if existing_is_placeholder:
+                    has_card_summary = bool((card_summary or "").strip())
+                    if has_card_summary or existing_is_placeholder:
+                        # 有card_summary或是占位符：直接更新
                         moment.ai_description = new_description
                     else:
                         # 过短的新文本通常是“标签截断/抽取失败”，不覆盖
@@ -2490,6 +2735,8 @@ class KeyMomentsManager:
                     print(f"✅ AI 分析完成: {moment_id}")
                     if (moment.ai_tagline or "").strip():
                         print(f"   🏷️ 标签: {moment.ai_tagline}")
+                    if framework_tags:
+                        print(f"   🔖 框架标签: {framework_tags}")
                     break
             
             # 保存更新
@@ -2616,7 +2863,7 @@ class KeyMomentsManager:
     - 0.60–0.79：关键（证据清晰，可复述）
     - 0.80–1.00：强关键（明显突破/转折/共识/方法改变）
 4) 输出要短：description/meeting_note 控制在 1-2 句，信息密度高，可复述。
-5) 需要提供 card_summary：用于卡片的 1-2 句（可分号/短句），“体育赛事播报风 + 创客马拉松语境”，更口语更好玩；可带 2-4 个轻量表情符号（如 🏁🛠️⚡️🎯🤖💡），但不要低俗。
+5) 需要提供 card_summary：用于卡片的简短摘要，**严格20-30字**，"体育赛事播报风 + 创客马拉松语境"，更口语更好玩；可带 2-3 个轻量表情符号（如 🏁🛠️⚡️🎯🤖💡），但不要低俗。
 
 【视觉信息】画面中的场景
 【语音内容】与该帧对齐的窗口对话转写:
@@ -2847,10 +3094,10 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
             # 追踪：打印模型原始JSON（截断/全量由 LLM_TRACE_* 控制）
             self._llm_trace_decision("multimodal parsed_json", result if isinstance(result, dict) else {"raw": result})
 
-            # 默认阈值略降低：你当前场景更像“讲授/结构化讲解”，0.60会很难命中
-            threshold = float(os.environ.get("MULTIMODAL_KEY_THRESHOLD", "0.45"))
-            # 默认冷却调低，避免漏记；仍会对短时间内的“低置信重复”进行抑制
-            cooldown_s = float(os.environ.get("MULTIMODAL_COOLDOWN_SECONDS", "15"))
+            # 多模态分析阈值（与AI检测阈值保持一致）
+            threshold = float(os.environ.get("MULTIMODAL_KEY_THRESHOLD", "0.35"))
+            # 降低冷却时间，避免漏记重要时刻
+            cooldown_s = float(os.environ.get("MULTIMODAL_COOLDOWN_SECONDS", "8"))
             debug_flag = (os.environ.get("MULTIMODAL_DEBUG", "0") or "0").strip().lower()
             debug_enabled = debug_flag in ("1", "true", "yes", "y", "on")
             debug_mode = (os.environ.get("MULTIMODAL_DEBUG_MODE", "concise") or "concise").strip().lower()
@@ -2998,12 +3245,38 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
         frame_path = self.moments_dir / frame_filename
         cv2.imwrite(str(frame_path), frame)
 
-        # 构建描述（包含语音引用）
+        # 构建描述（优先使用简短的card_summary显示在卡片上）
         card_summary = (ai_result.get("card_summary") or "").strip()
-        description = card_summary or (ai_result.get("description", "") or "").strip()
+        full_description = (ai_result.get("description", "") or "").strip()
+        description = card_summary or full_description  # 优先简短摘要
         key_quote = (ai_result.get("key_quote") or "").strip()
-        if key_quote:
+        if key_quote and key_quote not in description:
             description += f' 💬 "{key_quote}"'
+        
+        # 🏷️ 自动生成tags（从existing text content提取关键词）
+        tags = ai_result.get("tags", [])
+        if not tags or len(tags) == 0:
+            # 从tagline/description自动提取关键词作为tags
+            tagline = (ai_result.get("tagline") or "").strip()
+            text_for_tags = tagline or description or transcript or ""
+            # 改进的分词：按标点符号分割，提取短语
+            import re
+            # 移除emoji
+            clean_text = re.sub(r'[😀-🙏💀-🛿🎀-🏿🐀-🦿🌀-🗿⚀-⛿✀-➿]', '', text_for_tags)
+            # 按标点和空格分割
+            clean_text = re.sub(r'[，。！？、：；""''（）【】\s]+', '|', clean_text)
+            words = [w.strip() for w in clean_text.split('|') if w.strip()]
+            
+            # 过滤：只保留2-8字的短语，排除常见词
+            stopwords = {'的', '了', '和', '与', '在', '是', '有', '这', '那', '就', '不', '也', '都', '还', '从', '到'}
+            filtered = []
+            for w in words:
+                if 2 <= len(w) <= 8 and w not in stopwords:
+                    filtered.append(w)
+            
+            tags = filtered[:3]  # 只取前3个
+            if not tags:
+                tags = []
 
         moment = KeyMoment(
             id=moment_id,
@@ -3016,7 +3289,7 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
             transcript=transcript,
             ai_description=description,
             ai_importance=ai_result.get("importance", 0.7),
-            ai_tags=ai_result.get("tags", []),
+            ai_tags=tags,  # 使用自动生成的tags
             analysis=ai_result.get("meeting_note", "") or description,
             person_count=person_count,
             track_ids=track_ids,
@@ -3030,44 +3303,26 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
         # 先保存，再生成视频（确保后台处理可回写 transcript/analysis）
         self._save_moments()
 
-        before_s = float(os.environ.get("MULTIMODAL_BEFORE_SECONDS", "10"))
-        after_s = float(os.environ.get("MULTIMODAL_AFTER_SECONDS", "10"))
+        before_s = float(os.environ.get("MULTIMODAL_BEFORE_SECONDS", "15"))
+        after_s = float(os.environ.get("MULTIMODAL_AFTER_SECONDS", "15"))
 
-        # 🎬 生成视频：优先使用 5 分钟切片传入的窗口帧，避免 frame_buffer 过期
-        if video_frames:
-            video_path, video_duration = self._save_video_clip_from_provided_frames(
-                moment_id=moment_id,
-                provided_frames=video_frames,
-                frame_number=frame_number,
-                frame=frame,
-            )
-            if video_path:
-                moment.video_path = video_path
-                moment.video_duration = video_duration
-                self._save_moments()
+        # 🎬 统一使用frame_buffer生成完整30秒视频（保证一致性）
+        # 移除min_required_frames阈值判断，确保所有AI检测的关键时刻都是固定时长
+        video_path, video_duration = self._save_video_clip(
+            moment_id=moment_id,
+            clip_duration_before=float(before_s),
+            clip_duration_after=float(after_s),  # 前后15秒=30秒
+            frame_number=frame_number,
+            frame=frame,
+            center_timestamp=float(timestamp),
+        )
+        if video_path:
+            moment.video_path = video_path
+            moment.video_duration = video_duration
+            self._save_moments()
+            print(f"   ✅ 完整视频已生成: {video_duration:.1f}秒 (前{before_s:.0f}s + 后{after_s:.0f}s)")
         else:
-            video_path, video_duration = self._save_video_clip(
-                moment_id=moment_id,
-                clip_duration_before=float(before_s),
-                clip_duration_after=0.0,
-                frame_number=frame_number,
-                frame=frame,
-                center_timestamp=float(timestamp),
-            )
-            if video_path:
-                moment.video_path = video_path
-                moment.video_duration = video_duration
-                self._save_moments()
-                # 仅当 timestamp 仍在缓冲区窗口附近才尝试补齐 after
-                try:
-                    if abs(time.time() - float(timestamp)) <= float(self.buffer_max_seconds):
-                        threading.Timer(
-                            float(after_s),
-                            self._extend_video_with_after_frames,
-                            args=(moment_id, float(timestamp))
-                        ).start()
-                except Exception:
-                    pass
+            print(f"   ⚠️  视频生成失败")
         
         moment_type = ai_result.get("moment_type", "unknown")
         print(f"🎤📷 多模态关键时刻: {time_str} [{moment_type}]")
@@ -3109,7 +3364,13 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
             if transcript_segments:
                 full_transcript = " ".join([s.get("text", "") for s in transcript_segments])
             
-            prompt = f"""你是会议记录员（不是赛事解说员）。请根据以下内容，用简洁、信息密度高的中文总结。
+            prompt = f"""你是创客马拉松现场解说员，像NFL赛事解说员一样播报——专业、客观、但有画面感。
+
+【解说原则】
+- 忠实镜子：描述看到和听到的内容，不夸张、不瞎猜
+- 口语化表达：用"正在...""刚刚...""看到..."等自然语言
+- 适度热情：有节奏感，但不过度煽情
+- 少用网络梗：偶尔可以，但要自然（每段最多1个）
 
 【语音内容】
 {full_transcript[:3000] if full_transcript else "（暂无语音记录）"}
@@ -3117,24 +3378,57 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
 【标记时刻】
 {json.dumps(moments_summary, ensure_ascii=False, indent=2) if moments_summary else "（暂无标记）"}
 
-请用简洁的语言生成纪要，要求：
-- summary：1句话概括“在讨论什么/推进到哪一步”（不要形容词堆叠）
-- key_points：3-5条要点（每条≤15字，尽量是事实/结论/分歧点）
-- action_items：只写明确可执行的待办（没有就空数组）
-- decisions：只写已形成共识的结论（没有就空数组）
+🎙️ 播报要求：
+
+**summary（20-35字）：**
+客观描述现场状态，有画面感
+✅ 好："团队正在调试硬件，传感器出现数据不稳定的情况，大家在排查原因"
+✅ 好："看到他们找到了Bug位置，正在修改代码，进展不错"
+❌ 差："讨论了硬件问题"（太书面）
+❌ 差："芭比Q了！传感器炸了！"（太夸张）
+
+**key_points（3-5个要点，每条15-25字）：**
+客观事实，口语化短句
+✅ 好："电路板第三个接口接触不良，王工正在重新焊接"
+✅ 好："测试了A、B、C三个传感器型号，最后决定用A型"
+✅ 好："张工提出加滤波电路的建议，团队讨论后采纳了"
+❌ 差："硬件问题"（信息太少）
+❌ 差："这波操作YYDS，绝了！"（太娱乐化）
+
+**action_items（下一步计划）：**
+客观具体的下一步
+✅ 好："需要采购A型传感器模块，预计今天完成"
+✅ 好："准备修复接口Bug，然后重新测试"
+❌ 差："买传感器"（太简略）
+❌ 差："赶紧修Bug，不然芭比Q！"（太夸张）
+
+**decisions（已确定的决策）：**
+说清选择和原因
+✅ 好："决定使用React框架，因为团队更熟悉这个技术栈"
+✅ 好："采纳方案B，理由是虽然复杂但稳定性更好"
+❌ 差："用React"（没说为什么）
+
+💡 **解说技巧：**
+- 用现场感："正在...""看到...""听到...""刚刚..."
+- 描述动作："张工走向白板""两人正在讨论""小李在敲代码"
+- 转述对话：直接引用重要的话
+- 说明进度："已完成X""正在处理Y""下一步Z"
+- 适度评价：可以说"进展顺利""遇到困难"等客观评价
 
 返回JSON格式:
 {{
-    "summary": "一句话概括当前讨论内容",
-    "key_points": ["要点1", "要点2", "要点3"],
-    "action_items": ["待办事项（如果有）"],
-    "decisions": ["决策（如果有）"]
+    "summary": "客观描述现场状态（20-35字）",
+    "key_points": ["事实要点1（15-25字）", "事实要点2", "事实要点3"],
+    "action_items": ["具体的下一步计划"],
+    "decisions": ["决策内容（含理由）"]
 }}
 
-注意：
-- 直接根据内容生成，不要添加“下面是总结/综上”等套话
-- 不要像解说员一样渲染氛围；只写信息
-- 如果内容不足以总结，summary写"录制中，等待更多内容...""" 
+⚠️ 禁忌：
+- 别用书面语："根据""综上""会议讨论""本次"
+- 别太娱乐化：少用"YYDS""芭比Q""DNA动了"等网络梗
+- 别瞎夸张：基于实际内容，不煽情不吐槽
+- 内容不足时，summary写："现场较安静，等待下一步动作"
+""" 
 
             result_text = self._run_text_llm(
                 prompt=prompt,
@@ -3209,23 +3503,29 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
         
         # 保存关键帧
         frame_filename = f"{moment_id}.jpg"
-        frame_path = self.moments_dir / frame_filename
-        cv2.imwrite(str(frame_path), frame)
+        description = ai_result.get("description", "")
+        tagline = ai_result.get("tagline", "")
+        analysis_text = ai_result.get("analysis", "")
         
-        # 创建关键时刻
+        # 提取框架标签（从分析文本中）
+        framework_tags = KeyMomentsManager._extract_framework_tags(analysis_text)
+        
+        # 创建关键时刻对象
         moment = KeyMoment(
             id=moment_id,
-            timestamp=timestamp,
+            timestamp=float(timestamp),
+            source=MomentSource.MULTIMODAL_AI.value,
             frame_number=frame_number,
-            source=MomentSource.AI_DETECTED.value,
-            frame_path=str(frame_path),
-            time_str=time_str,
-            duration_seconds=duration,
-            ai_description=ai_result.get("description", ""),
-            ai_importance=ai_result.get("importance", 0.5),
-            ai_tags=ai_result.get("tags", []),
+            frame_path=frame_path,
+            ai_description=description,
+            ai_tagline=tagline,
+            ai_tags=tags,  # 使用自动生成的tags
+            ai_framework_tags=framework_tags,  # 添加框架标签
+            ai_importance=float(ai_result.get("importance", 0.5)),
+            transcript=transcript_segment,
             person_count=person_count,
-            track_ids=track_ids
+            analysis=analysis_text,
+            user_note=ai_result.get("observable_evidence", ""),
         )
         
         self.moments.append(moment)
@@ -3477,10 +3777,10 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
                 dt = ""
 
             source = (m.get("source") or "").strip()
-            tagline = _short(m.get("ai_tagline") or "", 40)
-            desc = _short(m.get("ai_description") or m.get("ai_analysis") or "", 80)
-            note = _short(m.get("user_note") or "", 60)
-            transcript = _short(m.get("transcript") or "", 80)
+            tagline = _short(m.get("ai_tagline") or "", 80)
+            desc = _short(m.get("ai_description") or m.get("ai_analysis") or "", 200)
+            note = _short(m.get("user_note") or "", 100)
+            transcript = _short(m.get("transcript") or "", 150)
             tags = m.get("ai_tags") or []
             if not isinstance(tags, list):
                 tags = []
@@ -3512,8 +3812,8 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
             "  \"edges\": [{\"source\":\"id1\",\"target\":\"id2\",\"type\":\"same_topic\",\"reason\":\"<=20字\"}]\n"
             "}\n"
             "要求：\n"
-            "- nodes 必须覆盖所有输入 id；label 用中文短语概括（<=12字）。\n"
-            "- edges 最多 40 条，只连接你有把握的关系；reason 必须短且可从输入中推断。\n"
+            "- nodes 必须覆盖所有输入 id；label 用中文短语概括（<=16字）。\n"
+            "- edges 最多 60 条，连接明确相关或可能相关的关系；reason 必须短且可从输入中推断。\n"
             "- 不要使用不存在的 id。\n\n"
             + json.dumps(items, ensure_ascii=False, indent=2)
         )
@@ -3568,7 +3868,7 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
                 t = float(n.get("t") or 0.0)
             except Exception:
                 t = 0.0
-            label = _short(str(n.get("label") or ""), 12)
+            label = _short(str(n.get("label") or ""), 16)
             norm_nodes.append({"id": nid, "t": t, "label": label})
 
         by_id = {it["id"]: it for it in items}

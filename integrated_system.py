@@ -339,9 +339,9 @@ frame_lock = threading.Lock()  # 线程锁
 # 会导致“切片分析挑到的时间点”在视频里只剩几秒、甚至完全不对应。
 video_slice_buffer = []
 
-# 默认：2fps 采样、2分钟=240帧；为了控制内存，存储降分辨率帧
-VIDEO_SLICE_SECONDS = float(os.environ.get("MULTIMODAL_SLICE_SECONDS", "120"))
-VIDEO_SLICE_FPS = float(os.environ.get("MULTIMODAL_SLICE_FPS", "2"))
+# 默认：5fps 采样、3.5分钟=1050帧；为了控制内存，存储降分辨率帧
+VIDEO_SLICE_SECONDS = float(os.environ.get("MULTIMODAL_SLICE_SECONDS", "210"))
+VIDEO_SLICE_FPS = float(os.environ.get("MULTIMODAL_SLICE_FPS", "5"))  # 提高到5fps，生成更流畅的30秒视频
 VIDEO_SLICE_FRAME_WIDTH = int(os.environ.get("MULTIMODAL_SLICE_FRAME_WIDTH", "320"))
 if VIDEO_SLICE_FPS < 0.2:
     VIDEO_SLICE_FPS = 0.2
@@ -606,7 +606,8 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             if any(api in args[0] for api in ['/api/stats', '/api/people', '/api/key_moments', 
                                               '/api/realtime_asr/transcript', '/api/realtime_asr/status',
                                               '/api/meeting_notes/current', '/api/video_feed',
-                                              '/api/face/', '/api/key_moment_image/', '/api/linkography']):
+                                              '/api/face/', '/api/key_moment_image/', '/api/linkography',
+                                              '/api/button_log']):
                 return  # 静默这些高频API请求
         # 显示其他请求（如标记关键时刻、启动ASR等）和错误
         super().log_message(format, *args)
@@ -654,6 +655,12 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             
         elif self.path == '/api/video_feed':
             self._serve_video_stream()
+        
+        elif self.path == '/api/video_source_info':
+            self._serve_video_source_info()
+        
+        elif self.path.startswith('/api/video_source_file'):
+            self._serve_video_source_file()
             
         elif self.path == '/api/people':
             self.send_json_response(self._get_people())
@@ -1042,6 +1049,103 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             print(f"Error serving keyframe: {e}")
             self.send_error(400)
     
+    def _serve_video_source_info(self):
+        """提供视频源信息"""
+        global key_moments_manager, current_stats
+        try:
+            stream_mode = current_stats.get("stream_mode", "unknown")
+            video_path = None
+            
+            if stream_mode == "video" and key_moments_manager:
+                video_path = getattr(key_moments_manager, 'video_source', None)
+            
+            self.send_json_response({
+                "stream_mode": stream_mode,
+                "video_path": video_path,
+                "has_audio": bool(video_path and os.path.exists(str(video_path)))
+            })
+        except Exception as e:
+            print(f"Error getting video source info: {e}")
+            self.send_json_response({"stream_mode": "unknown", "video_path": None, "has_audio": False})
+    
+    def _serve_video_source_file(self):
+        """提供视频文件流（支持 Range 请求以实现拖动进度条）"""
+        global key_moments_manager
+        try:
+            if not key_moments_manager:
+                self.send_error(500, "Key moments manager not initialized")
+                return
+            
+            video_path = getattr(key_moments_manager, 'video_source', None)
+            if not video_path or not os.path.exists(str(video_path)):
+                self.send_error(404, "Video file not found")
+                return
+            
+            # 获取文件大小
+            file_size = os.path.getsize(video_path)
+            
+            # 支持 Range 请求
+            range_header = self.headers.get('Range')
+            if range_header:
+                # 解析 Range 头
+                import re
+                range_match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+                if range_match:
+                    start = int(range_match.group(1))
+                    end = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+                    content_length = end - start + 1
+                    
+                    self.send_response(206)  # Partial Content
+                    self.send_header('Content-Range', f'bytes {start}-{end}/{file_size}')
+                    self.send_header('Content-Length', str(content_length))
+                else:
+                    start = 0
+                    content_length = file_size
+                    self.send_response(200)
+                    self.send_header('Content-Length', str(file_size))
+            else:
+                start = 0
+                content_length = file_size
+                self.send_response(200)
+                self.send_header('Content-Length', str(file_size))
+            
+            # 检测文件类型
+            if str(video_path).endswith('.mkv'):
+                content_type = 'video/x-matroska'
+            elif str(video_path).endswith('.mp4'):
+                content_type = 'video/mp4'
+            elif str(video_path).endswith('.webm'):
+                content_type = 'video/webm'
+            else:
+                content_type = 'video/mp4'  # 默认
+            
+            self.send_header('Content-type', content_type)
+            self.send_header('Accept-Ranges', 'bytes')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Cache-Control', 'no-cache')  # 改为 no-cache 避免音频缓存问题
+            self.end_headers()
+            
+            # 分块传输（避免大文件一次性读取）
+            chunk_size = 1024 * 1024  # 1MB chunks
+            with open(video_path, 'rb') as f:
+                f.seek(start)
+                remaining = content_length
+                while remaining > 0:
+                    chunk = f.read(min(chunk_size, remaining))
+                    if not chunk:
+                        break
+                    try:
+                        self.wfile.write(chunk)
+                    except (BrokenPipeError, ConnectionResetError):
+                        # 客户端断开连接
+                        break
+                    remaining -= len(chunk)
+        except Exception as e:
+            print(f"Error serving video source file: {e}")
+            import traceback
+            traceback.print_exc()
+            self.send_error(400)
+    
     # ============================================================
     # 🎯 关键时刻 API (双轨识别系统)
     # ============================================================
@@ -1054,15 +1158,55 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         
         moments = key_moments_manager.get_moments()
         
-        # 添加图片和视频 URL
+        # 🔍 质量过滤：移除低质量的AI识别时刻，但保留所有用户标记
+        # 可通过环境变量 AI_MOMENT_MIN_IMPORTANCE 调整阈值（默认0.3）
+        min_importance = float(os.environ.get('AI_MOMENT_MIN_IMPORTANCE', '0.3'))
+        
+        filtered_moments = []
+        skipped_count = 0
+        
         for m in moments:
+            # 用户手动标记的时刻：永远保留（即使无音频）
+            if m.get('source') == 'user_anchor':
+                filtered_moments.append(m)
+                continue
+            
+            # AI自动检测的时刻：应用质量过滤
+            if m.get('source') == 'ai_detected':
+                # 跳过明确标记为"无音频"的时刻
+                if m.get('ai_tagline') == '🎧 无音频':
+                    skipped_count += 1
+                    continue
+                
+                # 跳过重要性过低的时刻
+                importance = m.get('ai_importance', 0.0)
+                if importance < min_importance:
+                    skipped_count += 1
+                    continue
+            
+            # 多模态分析的时刻：也应用类似过滤
+            if m.get('source') == 'multimodal':
+                if m.get('ai_tagline') == '🎧 无音频':
+                    skipped_count += 1
+                    continue
+                importance = m.get('ai_importance', 0.0)
+                if importance < min_importance:
+                    skipped_count += 1
+                    continue
+            
+            filtered_moments.append(m)
+        
+        # 添加图片和视频 URL
+        for m in filtered_moments:
             m['image_url'] = f"/api/key_moment_image/{m['id']}"
             if m.get('video_path') and os.path.exists(m.get('video_path', '')):
                 m['video_url'] = f"/api/key_moment_video/{m['id']}"
         
         return {
-            "moments": moments,
-            "count": len(moments),
+            "moments": filtered_moments,
+            "count": len(filtered_moments),
+            "total_before_filter": len(moments),
+            "filtered_out": skipped_count,
             "stats": key_moments_manager.get_stats()
         }
     
@@ -2376,7 +2520,8 @@ def generate_meeting_notes_with_llm(transcript: str, mode: str = 'realtime') -> 
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=800
+                max_tokens=800,
+                timeout=30  # 显式设置超时
             )
             result_text = response.choices[0].message.content.strip()
         
@@ -2790,7 +2935,7 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
             if not hasattr(process_video_stream, '_slice_last_ts'):
                 process_video_stream._slice_last_ts = 0.0
             
-            slice_seconds = float(VIDEO_SLICE_SECONDS) if VIDEO_SLICE_SECONDS and VIDEO_SLICE_SECONDS > 1e-6 else 120.0
+            slice_seconds = float(VIDEO_SLICE_SECONDS) if VIDEO_SLICE_SECONDS and VIDEO_SLICE_SECONDS > 1e-6 else 210.0
 
             # 🎬 添加当前帧到视频切片缓冲区：按时间采样，覆盖完整切片窗口
             # 采样帧存储为降分辨率，避免内存爆炸。
@@ -2869,8 +3014,8 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                             return "\n".join(lines).strip()
 
                         # 窗口默认值：用于“给多模态判定的转写窗口”
-                        before_s = float(os.environ.get("MULTIMODAL_BEFORE_SECONDS", "10"))
-                        after_s = float(os.environ.get("MULTIMODAL_AFTER_SECONDS", "10"))
+                        before_s = float(os.environ.get("MULTIMODAL_BEFORE_SECONDS", "15"))
+                        after_s = float(os.environ.get("MULTIMODAL_AFTER_SECONDS", "15"))
 
                         # 视频窗口可以比转写窗口更大（默认跟随转写窗口）
                         video_before_s = float(os.environ.get("MULTIMODAL_VIDEO_BEFORE_SECONDS", str(before_s)))
@@ -2885,7 +3030,7 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                                 base_ts = getattr(key_moments_manager, 'start_time', None)
                                 candidates = key_moments_manager.suggest_key_moment_candidates(
                                     recent_items,
-                                    max_candidates=3,
+                                    max_candidates=5,
                                     base_timestamp=float(base_ts) if isinstance(base_ts, (int, float)) else None,
                                 )
                         except Exception:
@@ -2896,16 +3041,22 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                             try:
                                 start_ts = float(center_ts) - float(before)
                                 end_ts = float(center_ts) + float(after)
+                                print(f"🔍 [DEBUG] 筛选切片: frames_slice={len(frames_slice)}, 目标窗口=[{start_ts:.1f}, {end_ts:.1f}]")
                             except Exception:
                                 return out
+                            
+                            count_valid = 0
                             for it in frames_slice:
                                 if not isinstance(it, dict):
                                     continue
                                 ts = it.get('ts')
                                 if not isinstance(ts, (int, float)):
                                     continue
+                                count_valid += 1
                                 if start_ts <= float(ts) <= end_ts:
                                     out.append(it)
+                            
+                            # print(f"🔍 [DEBUG] 筛选结果: {len(out)} 帧 (从 {count_valid} 帧中)")
                             return out
 
                         def _nearest_frame_by_ts(target_ts: float):
@@ -2963,8 +3114,8 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                                             moment_ts = float(latest_moment.get('timestamp', frame_ts))
                                             
                                             # 计算窗口
-                                            before_s = float(os.environ.get("MULTIMODAL_BEFORE_SECONDS", "10"))
-                                            after_s = float(os.environ.get("MULTIMODAL_AFTER_SECONDS", "10"))
+                                            before_s = float(os.environ.get("MULTIMODAL_BEFORE_SECONDS", "15"))
+                                            after_s = float(os.environ.get("MULTIMODAL_AFTER_SECONDS", "15"))
                                             start_ts = moment_ts - before_s
                                             end_ts = moment_ts + after_s
                                             

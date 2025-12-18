@@ -552,17 +552,11 @@
         }
 
         .km-bucket-row {
-            display: flex;
-            flex-wrap: nowrap;
-            gap: 10px;
-            overflow-x: auto;
-            overflow-y: visible;
-            align-items: flex-start;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 12px;
             padding: 6px 2px 10px;
-            scrollbar-gutter: stable;
-            -webkit-overflow-scrolling: touch;
             max-width: 100%;
-            min-width: 0;
         }
 
         .km-minute-header {
@@ -1678,20 +1672,35 @@
         }
 
         .record-dot.glow {
-            animation: recordGlow 0.5s cubic-bezier(.4, 2, .6, 1) 1;
+            animation: recordGlowEnhanced 0.8s cubic-bezier(.4, 2, .6, 1) 1;
         }
 
-        @keyframes recordGlow {
+        @keyframes recordGlowEnhanced {
             0% {
-                box-shadow: 0 0 16px 2px rgba(255, 0, 0, 0.5), 0 0 0 2px #000;
+                box-shadow: 0 0 16px 2px rgba(255, 0, 0, 0.5), 0 0 0 3px #000;
+                transform: scale(1);
             }
 
-            60% {
-                box-shadow: 0 0 48px 16px rgba(255, 0, 0, 0.85), 0 0 0 2px #000;
+            20% {
+                box-shadow:
+                    0 0 60px 20px rgba(255, 0, 0, 0.95),
+                    0 0 100px 40px rgba(255, 50, 50, 0.6),
+                    0 0 0 3px #000;
+                transform: scale(1.15);
+            }
+
+            50% {
+                box-shadow:
+                    0 0 80px 30px rgba(255, 0, 0, 1),
+                    0 0 120px 50px rgba(255, 50, 50, 0.7),
+                    0 0 150px 60px rgba(255, 100, 100, 0.4),
+                    0 0 0 3px #000;
+                transform: scale(1.2);
             }
 
             100% {
-                box-shadow: 0 0 16px 2px rgba(255, 0, 0, 0.5), 0 0 0 2px #000;
+                box-shadow: 0 0 20px 4px rgba(255, 0, 0, 0.6), 0 0 0 3px #000;
+                transform: scale(1);
             }
         }
 
@@ -1843,10 +1852,9 @@
             display: none !important;
         }
 
-        /* Live Feed保持显示在AI直播间上方 */
+        /* Live Feed保持在AI直播间上方，但允许用户隐藏 */
         body.ai-live-active #video-docked-panel {
-            display: flex !important;
-            flex-direction: column;
+            /* 移除 display: flex !important; 以允许隐藏按钮工作 */
             flex: 0 0 auto;
             height: 280px;
             margin-bottom: 0;
@@ -1888,6 +1896,206 @@
             }
         }
 
+        /* 按钮按下红色闪烁效果 - 增强版 */
+        #button-flash-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, rgba(255, 50, 50, 0.7), rgba(255, 0, 0, 0.5));
+            pointer-events: none;
+            opacity: 0;
+            z-index: 99999;
+            display: none;
+        }
+
+        #button-flash-overlay.active {
+            display: block;
+            animation: buttonFlashEnhanced 1s ease-out;
+        }
+
+        @keyframes buttonFlashEnhanced {
+            0% {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            5% {
+                opacity: 0.9;
+                transform: scale(1);
+            }
+
+            15% {
+                opacity: 0.4;
+                transform: scale(1.02);
+            }
+
+            25% {
+                opacity: 0.8;
+                transform: scale(1);
+            }
+
+            40% {
+                opacity: 0.3;
+                transform: scale(1.01);
+            }
+
+            55% {
+                opacity: 0.6;
+                transform: scale(1);
+            }
+
+            70% {
+                opacity: 0.2;
+                transform: scale(1);
+            }
+
+            85% {
+                opacity: 0.4;
+                transform: scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: scale(1);
+            }
+        }
+
+        /* 按钮涟漪扩散效果 */
+        .button-ripple {
+            position: fixed;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(231, 76, 60, 0.8), rgba(231, 76, 60, 0.4), transparent);
+            pointer-events: none;
+            z-index: 99998;
+            animation: rippleExpand 1.2s ease-out forwards;
+        }
+
+        @keyframes rippleExpand {
+            0% {
+                width: 60px;
+                height: 60px;
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.6;
+            }
+
+            100% {
+                width: 400px;
+                height: 400px;
+                opacity: 0;
+            }
+        }
+
+        /* 悬浮红色按钮 (FAB) */
+        .floating-mark-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 70px;
+            height: 70px;
+            background: radial-gradient(circle at 30% 30%, #ff4444, #e74c3c, #c0392b);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow:
+                0 8px 24px rgba(231, 76, 60, 0.5),
+                0 0 0 4px rgba(0, 0, 0, 0.8),
+                inset 0 3px 8px rgba(255, 255, 255, 0.3),
+                inset 0 -3px 8px rgba(0, 0, 0, 0.3);
+            z-index: 9999;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: fab-pulse 2s ease-in-out infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+        }
+
+        @keyframes fab-pulse {
+
+            0%,
+            100% {
+                box-shadow:
+                    0 8px 24px rgba(231, 76, 60, 0.5),
+                    0 0 20px rgba(231, 76, 60, 0.4),
+                    0 0 0 4px rgba(0, 0, 0, 0.8),
+                    inset 0 3px 8px rgba(255, 255, 255, 0.3),
+                    inset 0 -3px 8px rgba(0, 0, 0, 0.3);
+            }
+
+            50% {
+                box-shadow:
+                    0 8px 24px rgba(231, 76, 60, 0.7),
+                    0 0 40px rgba(231, 76, 60, 0.6),
+                    0 0 60px rgba(231, 76, 60, 0.3),
+                    0 0 0 4px rgba(0, 0, 0, 0.8),
+                    inset 0 3px 8px rgba(255, 255, 255, 0.3),
+                    inset 0 -3px 8px rgba(0, 0, 0, 0.3);
+            }
+        }
+
+        .floating-mark-btn:hover {
+            transform: scale(1.1);
+            box-shadow:
+                0 12px 32px rgba(231, 76, 60, 0.7),
+                0 0 50px rgba(231, 76, 60, 0.8),
+                0 0 80px rgba(231, 76, 60, 0.4),
+                0 0 0 4px rgba(0, 0, 0, 0.8),
+                inset 0 3px 8px rgba(255, 255, 255, 0.4),
+                inset 0 -3px 8px rgba(0, 0, 0, 0.3);
+            animation: none;
+        }
+
+        .floating-mark-btn:active {
+            transform: scale(0.95);
+            box-shadow:
+                0 4px 12px rgba(231, 76, 60, 0.9),
+                0 0 60px rgba(231, 76, 60, 1),
+                0 0 100px rgba(231, 76, 60, 0.6),
+                0 0 0 4px rgba(0, 0, 0, 0.8),
+                inset 0 5px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* 悬浮按钮提示文字 */
+        .fab-tooltip {
+            position: absolute;
+            right: 85px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .floating-mark-btn:hover .fab-tooltip {
+            opacity: 1;
+        }
+
+        .fab-tooltip::after {
+            content: '';
+            position: absolute;
+            right: -6px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-left: 6px solid rgba(0, 0, 0, 0.85);
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+        }
+
         .gift-btn {
             padding: 6px 12px;
             margin: 0 4px;
@@ -1898,6 +2106,7 @@
             transition: all 0.2s;
             border-radius: 8px;
         }
+
 
         .gift-btn:hover {
             transform: scale(1.1);
@@ -1949,6 +2158,15 @@
         </div>
         <div class="menu-clock" id="menu-clock">12:00 PM</div>
     </div>
+
+    <!-- 按钮按下红色闪烁特效层 -->
+    <div id="button-flash-overlay"></div>
+
+    <!-- 悬浮红色标记按钮 (FAB) -->
+    <button class="floating-mark-btn" onclick="markKeyMoment()" title="Mark Key Moment (Space)">
+        🔴
+        <span class="fab-tooltip">标记关键时刻 (Space)</span>
+    </button>
 
     <!-- 主窗口 -->
     <div class="window">
@@ -2042,7 +2260,8 @@
                         <div id="keymoments-grid" class="keymoments-grid" style="flex: 1; min-height: 0;">
                             <div class="empty-state" style="width:100%; text-align:center;">
                                 <div style="color:#999;">No key moments yet</div>
-                                <div style="font-size:11px; color:#aaa;">Press red button or wait for AI detection
+                                <div style="font-size:11px; color:#aaa;">Press red button or wait for AI
+                                    detection
                                     (every
                                     2min)</div>
                             </div>
@@ -2057,7 +2276,8 @@
                                 <svg id="km-linkography-svg" viewBox="0 0 320 188"
                                     preserveAspectRatio="xMidYMid meet"></svg>
                             </div>
-                            <div id="km-linkography-resizer" class="km-linkography-resizer" title="拖动调整大小"></div>
+                            <div id="km-linkography-resizer" class="km-linkography-resizer" title="拖动调整大小">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2085,8 +2305,10 @@
                                     </span>
                                 </button>
                                 <div style="display: flex; flex-direction: column; gap: 2px;">
-                                    <span style="color: #333; font-size: 11px; font-weight: bold;">Mark Moment</span>
-                                    <span style="color: #666; font-size: 9px; font-weight: bold;">Hotkey: Space</span>
+                                    <span style="color: #333; font-size: 11px; font-weight: bold;">Mark
+                                        Moment</span>
+                                    <span style="color: #666; font-size: 9px; font-weight: bold;">Hotkey:
+                                        Space</span>
                                 </div>
                             </div>
                             <!-- 统计信息 -->
@@ -2131,7 +2353,7 @@
                     </div>
 
                     <!-- Live Feed（右侧列第一个面板） -->
-                    <div id="video-docked-panel">
+                    <div id="video-docked-panel" style="display: flex; flex-direction: column; min-height: 200px;">
                         <div class="panel-title" style="position: relative;">
                             📹 Live Feed
                             <button class="module-hide-btn"
@@ -2139,16 +2361,36 @@
                                 title="隐藏">🙈</button>
                         </div>
                         <div id="video-docked-slot"
-                            style="flex: 1; display: flex; align-items: center; justify-content: center; background: #000;">
-                            <img id="video-stream-right" src="/api/video_feed?fps=12" alt="Video"
-                                style="max-width: 100%; max-height: 100%; object-fit: contain;"
+                            style="flex: 1; display: flex; align-items: center; justify-content: center; background: #000; position: relative;">
+                            <video id="video-stream-right" controls autoplay muted
+                                style="max-width: 100%; max-height: 100%; object-fit: contain; display: none;"
                                 onerror="this.style.display='none'; document.getElementById('video-error-right').style.display='flex';">
+                                您的浏览器不支持视频播放
+                            </video>
+                            <img id="video-stream-right-mjpeg" src="/api/video_feed?fps=12" alt="Video"
+                                style="max-width: 100%; max-height: 100%; object-fit: contain; display: none;"
+                                onerror="this.style.display='none'; document.getElementById('video-error-right').style.display='flex';">
+                            <!-- 音频提示条 -->
+                            <div id="video-audio-hint" style="display: none; position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+                                       background: rgba(0, 0, 0, 0.85); color: #fff; padding: 8px 16px;
+                                       border-radius: 6px; font-size: 13px; z-index: 50; white-space: nowrap;
+                                       box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: none;">
+                                💡 点击播放器底部的 🔊 按钮开启音频
+                            </div>
                             <div id="video-error-right"
                                 style="display:none; color: #999; text-align: center; padding: 20px;">
                                 <div style="font-size: 24px;">📵</div>
                                 <div style="font-size: 11px;">No video signal</div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- 可拖拽分隔线 -->
+                    <div class="panel-resizer" id="video-notes-resizer" style="height: 6px; background: linear-gradient(90deg, #ccc 0%, #999 50%, #ccc 100%); 
+                                cursor: ns-resize; position: relative; z-index: 10; flex-shrink: 0;
+                                border-top: 1px solid #666; border-bottom: 1px solid #666;" title="拖动调整大小">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                                    width: 40px; height: 3px; background: #666; border-radius: 2px;"></div>
                     </div>
 
                     <!-- 中层: 🎤 实时语音转文字 -->
@@ -2231,8 +2473,10 @@
                             <div id="meeting-notes-content">
                                 <div style="color: #999; text-align: center; padding: 20px;">
                                     <div style="font-size: 32px; margin-bottom: 8px;">📋</div>
-                                    <div style="font-size: 13px; font-weight: bold; color: #333;">AI Meeting Notes</div>
-                                    <div style="font-size: 11px; margin-top: 4px;">Auto-generated from speech</div>
+                                    <div style="font-size: 13px; font-weight: bold; color: #333;">AI Meeting
+                                        Notes</div>
+                                    <div style="font-size: 11px; margin-top: 4px;">Auto-generated from speech
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2307,7 +2551,8 @@
             <button class="mac-button restart" id="restart-btn" onclick="showRestartHelp()"
                 style="display:none; background:#4a90d9;">🔄 RESTART</button>
             <button class="mac-button" onclick="refreshData()">🔄 REFRESH</button>
-            <button class="mac-button" onclick="window.open('http://localhost:8080', '_blank')">🌐 OPEN API</button>
+            <button class="mac-button" onclick="window.open('http://localhost:8080', '_blank')">🌐 OPEN
+                API</button>
             <div id="hidden-modules-dock" aria-label="Hidden modules"></div>
         </div>
 
@@ -2328,7 +2573,8 @@
                 style="background: linear-gradient(to bottom, #d4c4a8, #baa888); border-bottom: 2px solid #5a5a5a;">
                 <div class="close-box" onclick="closeTimeline()"
                     style="background: #f4e8d0; border: 2px solid #5a5a5a;"></div>
-                <div class="title-bar-text" id="timeline-title" style="background: transparent; color: #2a2a2a;">⭐ Key
+                <div class="title-bar-text" id="timeline-title" style="background: transparent; color: #2a2a2a;">⭐
+                    Key
                     Moments Timeline</div>
             </div>
             <div class="timeline-content" id="timeline-content">
@@ -2354,7 +2600,8 @@
                     <div class="notebook-nav">
                         <div class="notebook-page-indicator" id="moment-page-indicator">1 / 1</div>
                     </div>
-                    <div class="notebook-nav-btn" id="next-moment-btn" onclick="navigateMoment(1)" title="Next">▶
+                    <div class="notebook-nav-btn" id="next-moment-btn" onclick="navigateMoment(1)" title="Next">
+                        ▶
                     </div>
                     <div class="notebook-close" onclick="closeMomentDetail()">✕</div>
                 </div>
@@ -2768,8 +3015,8 @@
             }
             if (!core) return '';
 
-            // 卡片摘要：适合扫读（过长会撑爆卡片）
-            core = _shorten(core, 140);
+            // 卡片摘要：适合扫读（增加长度以显示更多细节）
+            core = _shorten(core, 200);  // 从140增加到200字符
 
             const prefix = _pickCardPrefix(m, isUserAnchor);
             let out = core;
@@ -3324,9 +3571,25 @@
                     const grid = document.getElementById('keymoments-grid');
                     const countEl = document.getElementById('keymoments-count');
 
+                    // 🎯 检测新关键时刻并触发特效
+                    const newCount = data.count || 0;
+                    if (window._lastMomentCount !== undefined && newCount > window._lastMomentCount) {
+                        console.log(`🔴 检测到新关键时刻! ${window._lastMomentCount} → ${newCount}`);
+                        // 检测是否是用户按钮触发的（最新的moment是user_anchor）
+                        if (data.moments && data.moments.length > 0) {
+                            const sorted = [...data.moments].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                            const latest = sorted[0];
+                            if (latest && latest.source === 'user_anchor') {
+                                console.log('⚡ 触发按钮闪烁特效!');
+                                triggerButtonFlash();
+                            }
+                        }
+                    }
+                    window._lastMomentCount = newCount;
+
                     // 更新统计
                     if (countEl) {
-                        countEl.textContent = `(${data.count || 0})`;
+                        countEl.textContent = `(${newCount})`;
                     }
 
                     // 更新统计面板
@@ -3337,6 +3600,17 @@
                     }
 
                     if (data.moments && data.moments.length > 0) {
+                        // 计算数据指纹（避免无变化时重渲染）
+                        const dataFingerprint = JSON.stringify(
+                            data.moments.map(m => [m.id, m.timestamp, m.ai_description, m.video_duration].join('|'))
+                        );
+
+                        if (window._lastMomentsFingerprint === dataFingerprint) {
+                            // 数据没变化，跳过重渲染
+                            return;
+                        }
+                        window._lastMomentsFingerprint = dataFingerprint;
+
                         // 保存所有时刻列表供翻页使用
                         const sorted = [...data.moments].sort((a, b) => {
                             const ta = Number(a?.timestamp);
@@ -3347,6 +3621,40 @@
                             return ta - tb;
                         });
 
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            const ts = Number(m?.timestamp);
+                            const btnMatch = Number.isFinite(ts) ? findMatchingButton(ts) : null;
+
+                            // 不再添加前缀，直接显示AI生成的内容
+                            let parts = [];
+
+                            // 优先使用 AI 生成的卡片摘要（20-30字的详细版本）
+                            const aiDesc = (m.ai_description || '').trim();
+                            if (aiDesc) {
+                                parts.push(aiDesc.split('\n')[0]);
+                                return parts.join('');
+                            }
+
+                            // 回退到标签（较短的版本）
+                            const tagline = (m.ai_tagline || '').trim();
+                            if (tagline) {
+                                parts.push(tagline);
+                                return parts.join('');
+                            }
+
+                            // 再回退到用户备注或转录文本
+                            const note = (m.user_note || '').trim();
+                            const transcript = (m.transcript || '').trim();
+                            if (note) {
+                                parts.push(note);
+                            } else if (transcript) {
+                                parts.push(transcript.slice(0, 60));
+                            } else {
+                                parts.push('(无描述)');
+                            }
+
+                            return parts.join('');
+                        };
                         allMomentsList = sorted;
                         window.allMoments = sorted;
 
@@ -3380,9 +3688,9 @@
                                 if (!description) {
                                     const raw = (m.user_note || m.transcript || 'No description');
                                     const prefix = isUserAnchor ? '📝 ' : '🗣️ ';
-                                    description = prefix + _shorten(raw, 80);
+                                    description = prefix + _shorten(raw, 300);  // 增加到300字符显示更多细节
                                 }
-                                const tags = (m.ai_tags || []).slice(0, 2).join(', ');
+                                const tags = (m.ai_framework_tags || "").trim();  // 使用框架标签，如[R2]论证、Eng-Flow
                                 const hasVideo = m.video_url && m.video_duration > 0;
                                 const dtShort = Number.isFinite(ts) && ts > 0 ? _kmFormatLocalTime(ts, false) : _kmMinuteKey(m?.time_str);
                                 const under = '';
@@ -3410,9 +3718,10 @@
                                             <span>${_escapeHtml(dtShort || '--:--')}</span>
                                             <span>${icon}</span>
                                         </div>
-                                        <div class="moment-desc">${_escapeHtml(description)}</div>
+                                        <div class="moment-desc" style="font-size:11px;">${_escapeHtml(description)}</div>
                                         ${under ? `<div class="moment-time-under">🕐 ${_escapeHtml(under)}</div>` : ''}
-                                        ${tags ? `<div style="font-size:10px; color:#666; margin-top:4px; font-style:italic;">#${tags}</div>` : ''}
+                                        ${tags ? `<div style="font-size:9px; color:#666; margin-top:2px; font-style:italic;">#${tags}</div>` : ''}
+                                        ${matchedButton ? `<div style="position:absolute; top:4px; left:4px; background:rgba(220,20,60,0.9); color:#fff; padding:1px 4px; border-radius:4px; font-size:8px; font-weight:bold; backdrop-filter:blur(4px);">🎮${matchedButton}</div>` : ''}
                                         ${m.ai_importance ? `<div style="position:absolute; bottom:4px; right:4px; font-size:10px; font-weight:bold; color:#d35400;">${(m.ai_importance * 100).toFixed(0)}%</div>` : ''}
                                     </div>
                                 `);
@@ -4117,7 +4426,8 @@
             const bottom = H - 12;
             const nCount = Math.max(1, sortedNodes.length);
             const maxGap = (bottom - top) / Math.max(1, nCount - 1);
-            const gap = Math.max(10, Math.min(24, Math.floor(maxGap)));  // 最小间距增加到10
+            // 计算最小间距（加大间距防止重叠）
+            const gap = Math.max(24, Math.min(32, Math.floor(maxGap)));  // 最小间距增加到18防重叠
             const yList = [];
             let lastY = -9999;
             for (let i = 0; i < sortedNodes.length; i++) {
@@ -4129,7 +4439,7 @@
                 lastY = y;
             }
             // 兜底：如果仍然有挤压（比如非常多节点），直接等分
-            if (sortedNodes.length >= 2 && gap <= 12) {
+            if (sortedNodes.length >= 2 && gap <= 16) {  // 提高阈值从12到16
                 for (let i = 0; i < yList.length; i++) {
                     const frac = i / Math.max(1, yList.length - 1);
                     yList[i] = top + (bottom - top) * frac;
@@ -4139,8 +4449,8 @@
             for (let i = 0; i < sortedNodes.length; i++) {
                 const n = sortedNodes[i];
                 const y = yList[i];
-                // 增加间距：左列120，右列380（总宽500）
-                const x = (i % 2 === 0) ? 120 : 380;
+                // 响应式定位：左列W/4，右列3W/4，确保与中线W/2对齐
+                const x = (i % 2 === 0) ? (W * 0.24) : (W * 0.76);
                 pos.set(String(n.id), { x, y, label: String(n.label || '') });
             }
 
@@ -4199,12 +4509,12 @@
                 const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 const isLeft = Number(p0.x) < (W / 2);
                 tx.setAttribute('x', String(isLeft ? (p0.x - 12) : (p0.x + 12)));
-                tx.setAttribute('y', String(p0.y + 4));
-                tx.setAttribute('font-size', '9');
+                tx.setAttribute('y', String(p0.y + 3));
+                tx.setAttribute('font-size', '6');  // 增大字体以显示更多内容
                 tx.setAttribute('font-weight', '700');
                 tx.setAttribute('fill', 'rgba(0,0,0,0.7)');
                 tx.setAttribute('text-anchor', isLeft ? 'end' : 'start');
-                tx.textContent = shortLabel(p0.label, 8);  // 缩短到8字以内
+                tx.textContent = shortLabel(p0.label, 6);  // 增加到6字显示更多信息
                 g.appendChild(tx);
 
                 const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
@@ -4336,9 +4646,70 @@
         let markPressCount = 0;
         let markDebounceTimer = null;
         const MARK_WINDOW_MS = 5000; // 5秒时间窗口
+        // 🔴 触发按钮按下红色闪烁 + 涟漪效果
+        function triggerButtonFlash() {
+            console.log('⚡ triggerButtonFlash() executing...');
 
-        function markKeyMoment() {
+            const overlay = document.getElementById('button-flash-overlay');
+            console.log('   Overlay element:', overlay);
+
+            if (!overlay) {
+                console.error('❌ button-flash-overlay not found!');
+                return;
+            }
+
+            // 移除旧的动画
+            overlay.classList.remove('active');
+
+            // 强制重绘
+            void overlay.offsetWidth;
+
+            // 触发新动画
+            overlay.classList.add('active');
+            console.log('   ✅ Flash overlay activated');
+
+            // 动画结束后移除class
+            setTimeout(() => {
+                overlay.classList.remove('active');
+                console.log('   ✅ Flash overlay deactivated');
+            }, 1000);
+
+            // 🌊 添加涟漪扩散效果
+            console.log('   🌊 Triggering ripple effect...');
+            triggerRippleEffect();
+        }
+
+        // 🌊 涟漪扩散效果
+        function triggerRippleEffect() {
             const btn = document.getElementById('mark-moment-btn');
+            if (!btn) return;
+
+            // 获取按钮位置
+            const rect = btn.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            // 创建涟漪元素
+            const ripple = document.createElement('div');
+            ripple.className = 'button-ripple';
+            ripple.style.left = (centerX - 30) + 'px';  // 初始大小60px，所以偏移30px
+            ripple.style.top = (centerY - 30) + 'px';
+            document.body.appendChild(ripple);
+
+            // 动画结束后移除
+            setTimeout(() => {
+                ripple.remove();
+            }, 1200);
+        }
+
+        // 手动标记关键时刻
+        function markKeyMoment() {
+            console.log('🔴 markKeyMoment() called - triggering flash effect');
+
+            // 🔴 立即触发红色闪烁反馈
+            triggerButtonFlash();
+
+            const btn = document.getElementById('anchor-btn');
             const noteInput = document.getElementById('moment-note');
             const note = noteInput ? noteInput.value.trim() : '';
             const now = Date.now();
@@ -5055,18 +5426,74 @@
 
             let html = '';
 
-            // 显示历史记录（简化版，只显示摘要）
+            // 显示历史记录（改进版：折叠展开 + 完整信息）
             if (history.length > 1) {
-                html += `<div class="notes-history" style="margin-bottom: 12px; border-bottom: 1px dashed #ddd; padding-bottom: 8px;">`;
+                const historyCount = history.length - 1;
+                html += `<div class="notes-history" style="margin-bottom: 16px;">`;
+                html += `<div onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'" 
+                             style="padding: 8px 12px; background: linear-gradient(135deg, #f5f5f5, #eeeeee); 
+                                    border-radius: 6px; cursor: pointer; user-select: none;
+                                    font-weight: 600; color: #555; font-size: 13px;
+                                    border: 1px solid #ddd; margin-bottom: 8px;">
+                    📋 历史记录 (${historyCount}条) <span style="float: right; font-size: 11px;">▼ 点击展开</span>
+                </div>`;
+
+                html += `<div style="display: none; max-height: 300px; overflow-y: auto;">`;
                 for (let i = 0; i < history.length - 1; i++) {
                     const h = history[i];
-                    html += `<div style="padding: 6px 8px; margin: 4px 0; background: #f5f5f5; border-radius: 4px; 
-                                font-size: 12px; color: #666; border-left: 2px solid #ccc;">
-                        <span style="color: #999; font-size: 10px;">${h.update_time || ''}</span>
-                        ${h.summary || ''}
-                    </div>`;
+                    const timestamp = h.generated_at || h.update_time || '';
+                    const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : `#${i + 1}`;
+
+                    html += `<div style="padding: 10px; margin: 6px 0; background: #fafafa; border-radius: 6px; 
+                                border-left: 3px solid #9e9e9e; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <div style="font-size: 10px; color: #999; margin-bottom: 4px;">
+                            🕐 ${timeStr}
+                        </div>
+                        
+                        ${h.ai_framework_tags ? `
+                            <div style="margin-bottom: 12px; padding: 8px; background: linear-gradient(135deg, #fff3cd, #ffeaa7); 
+                                        border: 2px solid #f39c12; border-radius: 6px;">
+                                <div style="font-size: 11px; color: #856404; font-weight: bold; margin-bottom: 4px;">
+                                    🔖 分析框架标签
+                                </div>
+                                <div style="font-size: 13px; color: #d4850a; font-weight: bold;">
+                                    ${h.ai_framework_tags}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        ${h.ai_tagline ? `
+                            <div style="font-size: 14px; margin-bottom: 10px; color: #2c3e50; font-weight: bold; 
+                                        padding: 8px; background: #ecf0f1; border-left: 4px solid #3498db; border-radius: 3px;">
+                                ${h.ai_tagline}
+                            </div>
+                        ` : ''}
+                        
+                        <div style="font-size: 13px; line-height: 1.6; color: #2c3e50; margin-bottom: 12px;">
+                            ${h.ai_description || h.user_note || '无描述'}
+                        </div>
+                        
+                        ${h.ai_tags && h.ai_tags.length > 0 ? `
+                            <div style="margin-top: 8px;">` : ''}
+                        <div style="font-size: 12px; color: #333; font-weight: 500; margin-bottom: 4px;">
+                            ${h.summary || '无摘要'}
+                        </div>`;
+
+                    // 显示精简的要点
+                    if (h.key_points && h.key_points.length > 0) {
+                        html += `<div style="font-size: 11px; color: #666; margin-top: 6px; padding-left: 8px;">`;
+                        h.key_points.slice(0, 2).forEach((pt, idx) => {
+                            html += `<div style="margin: 2px 0;">• ${pt}</div>`;
+                        });
+                        if (h.key_points.length > 2) {
+                            html += `<div style="color: #999; font-style: italic;">...还有${h.key_points.length - 2}条</div>`;
+                        }
+                        html += `</div>`;
+                    }
+
+                    html += `</div>`;
                 }
-                html += `</div>`;
+                html += `</div></div>`;
             }
 
             // 显示当前最新纪要
@@ -5394,7 +5821,7 @@
 
         setInterval(updateStats, 2000);  // 降低轮询频率，避免拖慢本地模型推理
         setInterval(updatePeople, 3000);
-        setInterval(updateKeyMoments, 3000);
+        setInterval(updateKeyMoments, 500);  // 每0.5秒检测一次，快速响应按钮按下
 
         // 拖动调整 Key Moments / Voice-AI 面板宽度
         const panelResizer = document.getElementById('panel-resizer');
@@ -5673,13 +6100,116 @@
             });
         }
 
+        // 初始化面板调整大小功能
+        function initPanelResizer() {
+            const resizer = document.getElementById('video-notes-resizer');
+            const videoPanel = document.getElementById('video-docked-panel');
+
+            if (!resizer || !videoPanel) return;
+
+            let isResizing = false;
+            let startY = 0;
+            let startHeight = 0;
+
+            resizer.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                startY = e.clientY;
+                startHeight = videoPanel.offsetHeight;
+                document.body.style.cursor = 'ns-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+
+                const delta = e.clientY - startY;
+                const newHeight = Math.max(150, Math.min(800, startHeight + delta));
+                videoPanel.style.height = newHeight + 'px';
+                videoPanel.style.flex = 'none';  // 禁用flex以使用固定高度
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                }
+            });
+        }
+
         // 初始化拖动
         (() => {
             const floatingControls = document.getElementById('floating-controls');
             if (floatingControls) {
                 makeDraggable(floatingControls);
             }
+
+            // 初始化面板调整大小
+            initPanelResizer();
         })();
+
+
+        // ===================================================================
+        // 🎬 视频源检测与切换（视频文件 vs MJPEG流）
+        // ===================================================================
+        async function initVideoDisplay() {
+            try {
+                const response = await fetch('/api/video_source_info');
+                const data = await response.json();
+
+                console.log('📹 视频源信息:', data);
+
+                const videoEl = document.getElementById('video-stream-right');
+                const mjpegEl = document.getElementById('video-stream-right-mjpeg');
+                const errorEl = document.getElementById('video-error-right');
+                const audioHint = document.getElementById('video-audio-hint');
+
+                if (data.stream_mode === 'video' && data.has_audio) {
+                    // 使用 <video> 标签播放文件
+                    console.log('✅ 视频文件模式：使用 <video> 播放');
+                    videoEl.src = '/api/video_source_file';
+                    videoEl.style.display = 'block';
+                    mjpegEl.style.display = 'none';
+                    errorEl.style.display = 'none';
+
+                    // 显示音频提示（5秒后自动隐藏）
+                    if (audioHint) {
+                        audioHint.style.display = 'block';
+                        setTimeout(() => audioHint.style.display = 'none', 5000);
+                    }
+
+                    // 视频开始播放后自动尝试取消静音（可能被浏览器阻止）
+                    videoEl.addEventListener('play', () => {
+                        console.log('▶️ 视频开始播放');
+                        // 尝试取消静音（用户如果点击过页面，这可能会成功）
+                        setTimeout(() => {
+                            videoEl.muted = false;
+                            console.log('🔊 尝试自动开启音频');
+                        }, 500);
+                    }, { once: true });
+
+                    videoEl.addEventListener('error', (e) => {
+                        console.error('❌ 视频加载错误:', e);
+                    });
+                } else {
+                    // 使用 MJPEG 图片流
+                    console.log('📷 摄像头/OBS模式：使用 MJPEG 流');
+                    videoEl.style.display = 'none';
+                    mjpegEl.style.display = 'block';
+                    errorEl.style.display = 'none';
+                    if (audioHint) audioHint.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('❌ 获取视频源信息失败:', error);
+                // 回退到 MJPEG
+                document.getElementById('video-stream-right').style.display = 'none';
+                document.getElementById('video-stream-right-mjpeg').style.display = 'block';
+            }
+        }
+
+        // 页面加载后初始化视频显示
+        initVideoDisplay();
 
     </script>
 </body>

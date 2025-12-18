@@ -20,19 +20,34 @@ LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "button_log.
 API_BASE_URL = "http://localhost:8082"
 
 def trigger_key_moment(button_number):
-    """触发创建关键时刻"""
-    try:
-        url = f"{API_BASE_URL}/api/mark_moment"
-        payload = {
-            "note": f"🎮 按钮 {button_number}"
-        }
-        response = requests.post(url, json=payload, timeout=2)
-        if response.status_code == 200:
-            print(f"✅ 关键时刻已创建: 按钮 {button_number}")
-        else:
-            print(f"⚠️  创建关键时刻失败: {response.status_code}")
-    except Exception as e:
-        print(f"❌ 调用API失败: {e}")
+    """触发创建关键时刻（带重试机制）"""
+    max_retries = 3
+    retry_delay = 0.5
+    
+    for attempt in range(max_retries):
+        try:
+            url = f"{API_BASE_URL}/api/mark_moment"
+            payload = {
+                "note": f"🎮 按钮 {button_number}"
+            }
+            response = requests.post(url, json=payload, timeout=10)  # 增加超时到10秒（AI分析时可能较慢）
+            if response.status_code == 200:
+                print(f"✅ 关键时刻已创建: 按钮 {button_number} (尝试 {attempt + 1}/{max_retries})")
+                return True
+            else:
+                print(f"⚠️  创建关键时刻失败: {response.status_code} (尝试 {attempt + 1}/{max_retries})")
+        except requests.exceptions.Timeout:
+            # 超时时只在最后一次尝试才打印错误，避免刷屏
+            if attempt == max_retries - 1:
+                print(f"⏱️  API超时（系统可能正在进行AI分析）- 按钮 {button_number} 已记录但创建可能延迟")
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"❌ 调用API失败: {e}")
+        
+        if attempt < max_retries - 1:
+            time.sleep(retry_delay)
+    
+    return False
 
 def save_button_press(button_number):
     """保存按钮消息和时间到文件，并触发创建关键时刻"""

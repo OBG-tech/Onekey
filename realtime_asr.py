@@ -103,6 +103,12 @@ class RealtimeASR:
         # 流式识别
         self.recognition = None
         self.recognition_thread = None
+        
+        # 自动重连机制
+        self.connection_failed = False
+        self.reconnect_attempts = 0
+        self.max_reconnect_attempts = 3
+        self.reconnect_delay = 2.0  # 初始延迟2秒
 
         # 离线分段识别（FireRedASR / FunASR）
         self.segment_seconds = max(1.0, float(segment_seconds))
@@ -191,8 +197,10 @@ class RealtimeASR:
         print("🎤 识别会话结束")
     
     def _on_error(self, result):
-        """识别错误回调"""
+        """识别错误回调 - 触发自动重连"""
         print(f"❌ 识别错误: {result}")
+        # 标记连接失败，触发重连
+        self.connection_failed = True
     
     def _on_event(self, result):
         """识别事件回调"""
@@ -247,7 +255,14 @@ class RealtimeASR:
             try:
                 self.recognition.send_audio_frame(audio_data)
             except Exception as e:
-                print(f"⚠️  发送音频帧错误: {e}")
+                error_msg = str(e).lower()
+                # 检测连接错误
+                if "stopped" in error_msg or "closing" in error_msg or "reset" in error_msg:
+                    if not self.connection_failed:
+                        print(f"⚠️  ASR连接中断: {e}")
+                        self.connection_failed = True
+                else:
+                    print(f"⚠️  发送音频帧错误: {e}")
 
     def _get_fireredasr_model(self):
         if self._firered_model is not None:
@@ -512,61 +527,114 @@ class RealtimeASR:
                 self.audio_listener = None
     
     def _recognition_worker(self):
-        """识别工作线程 - 流式模式"""
-        try:
-            print("🎤 启动流式语音识别...")
-            
-            # 创建识别回调 (DashScope API不需要参数)
-            callback = RecognitionCallback()
-            callback.on_complete = self._on_complete
-            callback.on_error = self._on_error
-            callback.on_event = self._on_event
-            
-            # 创建流式识别对象
-            self.recognition = Recognition(
-                model='paraformer-realtime-v2',
-                format='pcm',
-                sample_rate=16000,
-                callback=callback
-            )
-            
-            # 启动识别
-            self.recognition.start()
-            print("✅ 流式识别已启动")
-            
-            # 注册音频监听器
-            self.audio_listener = self.audio_manager.register_listener(
-                "RealtimeASR",
-                self._on_audio
-            )
-            
-            print("✅ 音频采集已启动")
-            
-            # 保持线程运行直到停止录音
-            while self.is_recording:
-                time.sleep(0.1)
+        """识别工作线程 - 流式模式（带自动重连）"""
+        
+        while self.is_recording:
+            try:
+                print(f"🎤 启动流式语音识别... (尝试 {self.reconnect_attempts + 1}/{self.max_reconnect_attempts + 1})")
                 
-        except Exception as e:
-            print(f"❌ 识别错误: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            # 停止识别
-            if self.recognition:
-                try:
-                    self.recognition.stop()
-                except:
-                    pass
-            
-            # 取消注册音频监听器
-            if self.audio_listener:
-                try:
-                    self.audio_manager.unregister_listener(self.audio_listener)
-                    self.audio_listener = None
-                except:
-                    pass
-            
-            print("🛑 识别已停止")
+                # 创建识别回调 (DashScope API不需要参数)
+                callback = RecognitionCallback()
+                callback.on_complete = self._on_complete
+                callback.on_error = self._on_error
+                callback.on_event = self._on_event
+                
+                # 创建流式识别对象
+                self.recognition = Recognition(
+                    model='paraformer-realtime-v2',
+                    format='pcm',
+                    sample_rate=16000,
+                    callback=callback
+                )
+                
+                # 启动识别
+                self.recognition.start()
+                print("✅ 流式识别已启动")
+                
+                # 注册音频监听器
+                if not self.audio_listener:
+                    self.audio_listener = self.audio_manager.register_listener(
+                        "RealtimeASR",
+                        self._on_audio
+                    )
+                    print("✅ 音频采集已启动")
+                
+                # 重置连接状态
+                self.connection_failed = False
+                self.reconnect_attempts = 0
+                
+                # 保持线程运行，监控连接状态
+                while self.is_recording and not self.connection_failed:
+                    time.sleep(0.5)
+                
+                # 检查是否需要重连
+                if self.connection_failed and self.is_recording:
+                    print(f"🔄 检测到连接中断，准备重连...")
+                    
+                    # 清理当前连接
+                    if self.recognition:
+                        try:
+                            self.recognition.stop()
+                        except:
+                            pass
+                        self.recognition = None
+                    
+                    # 检查重连次数
+                    if self.reconnect_attempts >= self.max_reconnect_attempts:
+                        print(f"❌ 重连失败次数过多({self.max_reconnect_attempts}次)，停止ASR")
+                        self.is_recording = False
+                        break
+                    
+                    # 指数退避延迟
+                    delay = self.reconnect_delay * (2 ** self.reconnect_attempts)
+                    print(f"⏱️  等待 {delay:.1f} 秒后重连...")
+                    time.sleep(delay)
+                    
+                    self.reconnect_attempts += 1
+                    continue  # 重新开始循环，尝试重连
+                else:
+                    # 正常停止
+                    break
+                    
+            except Exception as e:
+                print(f"❌ 识别错误: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # 清理
+                if self.recognition:
+                    try:
+                        self.recognition.stop()
+                    except:
+                        pass
+                    self.recognition = None
+                
+                # 判断是否重连
+                if self.reconnect_attempts < self.max_reconnect_attempts and self.is_recording:
+                    delay = self.reconnect_delay * (2 ** self.reconnect_attempts)
+                    print(f"⏱️  {delay:.1f} 秒后自动重连...")
+                    time.sleep(delay)
+                    self.reconnect_attempts += 1
+                    continue
+                else:
+                    break
+        
+        # 最终清理
+        if self.recognition:
+            try:
+                self.recognition.stop()
+            except:
+                pass
+        
+        # 取消注册音频监听器
+        if self.audio_listener:
+            try:
+                self.audio_manager.unregister_listener(self.audio_listener)
+                self.audio_listener = None
+            except:
+                pass
+        
+        print("🛑 识别已停止")
     
     def start_recording(self):
         """开始录制和转录"""

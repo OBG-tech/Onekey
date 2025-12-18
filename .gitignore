@@ -15,6 +15,7 @@ ENV/
 
 # 数据存储目录（视频、图片等）
 integrated_data/
+archives/
 # - 包含 key_moments/ (关键时刻视频和图片)
 # - 包含 face_database/ (人脸数据库图片)
 # - 包含 snapshots/ (快照图片)
@@ -40,8 +41,12 @@ button_log.txt
 
 # 录音文件
 recordings/
-*.wav
+*.wav   
 *.mp3
+*.mp4
+*.jpg
+*.png
+*.jpeg
 
 # 临时文件
 *.tmp

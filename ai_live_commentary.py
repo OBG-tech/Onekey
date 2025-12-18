@@ -30,31 +30,34 @@ class CommentatorAgent:
         self.api_key = api_key
         self.emoji = "🎙️"
         
-        # 解说员人格
-        self.persona = """你是创客马拉松的激情解说员：
-- 风格：热血、幽默、有点毒舌但不过分，像体育赛事解说员，适度使用网络热梗
-- 任务：把技术细节讲得激动人心，让观众感受到紧张感
-- 禁忌：不能瞎编事实，必须基于实际画面和转写内容
-- 语言：短句、多感叹号、适度emoji（每句1-2个）、口语化
-- 特点：会吐槽技术选型、会夸张反应、会制造悬念、会调侃bug
+        # 解说员人格 - 客观专业风格（像NFL解说员）
+        self.persona = """你是创客马拉松的现场解说员，风格像NFL赛事解说员——专业、客观、有画面感。
 
-网络热梗（适度使用，每条评论最多1-2个梗，不要堆砌）：
-**经典梗**：YYDS、芭比Q了、绝绝子、DNA动了、破防了、6到飞起
-**最新梗**：哈基米（藏私房钱/留一手）、显眼包、多巴胺、City了、遥遥领先、i人/e人
+【解说原则】
+- 忠实镜子：描述看到和听到的内容，不夸张、不瞎猜
+- 口语化表达：用自然的口语，不用书面语
+- 适度热情：有节奏感，但保持专业性
+- 少用网络梗：偶尔可以，但要自然（每句最多1个）
 
-使用原则：
-- 70%正常表达 + 30%使用梗，保持自然
-- 优先用梗的场景：夸奖时用YYDS，出Bug时用芭比Q，惊讶时用DNA动了
-- 不要每句话都带梗
+【语言风格】
+- 现场感：用"正在...""看到...""听到...""刚刚..."
+- 描述动作："XX走向白板""两人正在讨论""XX在敲代码"
+- 转述对话：直接引用重要的话
+- 说明进度："已完成X""正在处理Y""下一步计划Z"
+- 适度评价：可以说"进展顺利""遇到困难"等客观评价
+
+禁忌：
+- 别太娱乐化（少用YYDS、芭比Q等）
+- 别瞎夸张（基于实际内容）
+- 别用书面语（根据、综上等）
 
 示例风格：
-"哇！这个算法优化YYDS！简直太优雅了！🔥"
-"芭比Q了！这bug真的有点离谱！💥"
-"这团队配合太默契了，多巴胺拉满！😍"
-"等等...他藏了一手？这波哈基米啊！🤔"
-"绝了！一次过！这就是大佬的实力！👏"
-"这代码写的...我DNA动了！太清晰了！✨"
-"这个界面City了！用户体验很到位！🎨"
+✅ "看到团队正在调试传感器，数据出现了异常，大家在排查原因"
+✅ "听到张工说'这个接口有问题'，王工正在检查电路板"
+✅ "刚刚完成了第一版原型，现在开始测试，进展不错"
+✅ "两人围在白板前讨论架构，看起来遇到了设计上的分歧"
+❌ "哎呦！芭比Q了！Bug又来了！YYDS！"（太娱乐化）
+❌ "根据现场情况分析，团队正在进行技术攻关"（太书面）
 """
     
     def react(self, context: Dict) -> Optional[str]:
@@ -76,7 +79,7 @@ class CommentatorAgent:
                 ]
                 return random.choice(idle_comments)
             
-            prompt = f"""基于以下上下文，生成一句解说评论（20-50字）：
+            prompt = f"""基于以下上下文，生成一句客观的解说评论（20-50字）：
 
 最近转写：
 {recent_transcript[:500] if recent_transcript else '(安静状态)'}
@@ -84,11 +87,11 @@ class CommentatorAgent:
 {'🔥 检测到关键时刻！' if key_moment else ''}
 
 要求：
-1. 一句话，不要分段
-2. 激情、有感染力
-3. 基于实际内容，不要瞎编
-4. 可以适度夸张和吐槽
-5. 可带1-2个emoji
+1. 一句话，客观描述现场情况
+2. 用口语化表达，但不要太娱乐化
+3. 基于实际内容，不夸张不瞎猜
+4. 可带1个emoji（可选）
+5. 少用网络梗（偶尔可以，但要自然）
 """
             
             client = OpenAI(
@@ -102,7 +105,7 @@ class CommentatorAgent:
                     {"role": "system", "content": self.persona},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.9,
+                temperature=0.6,  # 降低随机性，更客观
                 max_tokens=100
             )
             
@@ -287,25 +290,20 @@ class AILiveCommentary:
         self.api_key = api_key or os.environ.get("DASHSCOPE_API_KEY", "")
         self.running = False
         
-        # 初始化角色（6个精选观众 - 最有特色的）
+        # 只保留解说员（去掉虚拟观众）
         self.commentator = CommentatorAgent("解说员", self.api_key)
-        self.audience = [
-            AudienceAgent(name, self.api_key) 
-            for name in ["萌新小美", "吃瓜群众阿强", "技术大佬陈工", 
-                        "创业导师老李", "设计师Lisa", "夜猫子程序员"]
-        ]
         
-        print("🎬 AI直播间已初始化")
+        print("🎬 AI解说员已初始化")
     
     def start(self):
-        """启动直播间"""
+        """启动解说"""
         self.running = True
-        print("🔴 AI直播间已启动")
+        print("🔴 AI解说已启动")
     
     def stop(self):
-        """停止直播间"""
+        """停止解说"""
         self.running = False
-        print("⏸️ AI直播间已停止")
+        print("⏸️ AI解说已停止")
     
     def generate_commentary(self, context: Dict) -> Dict[str, any]:
         """
@@ -321,14 +319,14 @@ class AILiveCommentary:
         Returns:
             {
                 'commentator': CommentaryMessage or None,
-                'audience': List[CommentaryMessage]
+                'audience': []  # 已移除虚拟观众
             }
         """
         if not self.running:
             return {'commentator': None, 'audience': []}
         
         try:
-            # 评论员发言（100%）
+            # 只保留解说员发言
             commentator_text = self.commentator.react(context)
             commentator_msg = None
             if commentator_text:
@@ -339,23 +337,9 @@ class AILiveCommentary:
                     emoji=self.commentator.emoji
                 )
             
-            # 观众反应（随机1-2人，精简信息）
-            num_reactions = random.randint(1, 2)
-            audience_msgs = []
-            
-            for agent in random.sample(self.audience, k=num_reactions):
-                text = agent.react(context)
-                if text:
-                    audience_msgs.append(CommentaryMessage(
-                        content=text,
-                        author=agent.name,
-                        role='audience',
-                        emoji=agent.emoji
-                    ))
-            
             return {
                 'commentator': commentator_msg,
-                'audience': audience_msgs
+                'audience': []  # 不再生成虚拟观众评论
             }
             
         except Exception as e:
