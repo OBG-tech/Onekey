@@ -95,19 +95,18 @@ def start_server():
             close_client(sock, "同 IP 新连接，关闭旧连接")
     
     def check_dead_connections():
-        """检测并关闭死连接"""
-        now = time.time()
+        """检测并关闭死连接（仅通过发送心跳包检测，不基于活动时间）"""
         to_close = []
-        for sock, (addr, last_time) in clients.items():
-            # 如果超过 30 秒没有活动，尝试发送心跳检测
-            if now - last_time > 30:
-                try:
-                    # 发送一个心跳包检测连接
-                    sock.send(b'\x00')
-                except (ConnectionResetError, BrokenPipeError, OSError):
-                    to_close.append((sock, "心跳检测失败"))
-                except BlockingIOError:
-                    pass  # 发送缓冲区满，连接可能还活着
+        for sock, (addr, _) in clients.items():
+            try:
+                # 尝试发送心跳包检测连接是否存活
+                # TCP keepalive 会自动处理底层连接检测
+                # 这里只是额外的主动检测
+                sock.send(b'\x00')
+            except (ConnectionResetError, BrokenPipeError, OSError):
+                to_close.append((sock, "心跳检测失败 - 连接已断开"))
+            except BlockingIOError:
+                pass  # 发送缓冲区满，连接可能还活着
         for sock, reason in to_close:
             close_client(sock, reason)
     
