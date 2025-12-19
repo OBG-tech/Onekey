@@ -2593,6 +2593,9 @@ class VideoSource:
         或使用虚拟摄像头:
         OBS -> 工具 -> 虚拟摄像头 -> 启动
         """
+        import glob
+        import subprocess
+        
         # 方式1: RTMP流 (需要nginx-rtmp或其他流媒体服务器)
         cap = cv2.VideoCapture(url)
         
@@ -2600,11 +2603,9 @@ class VideoSource:
         if not cap.isOpened():
             print("⚠️  RTMP流连接失败，尝试OBS虚拟摄像头...")
             
-            import glob
-            import subprocess
-            
             # 查找 v4l2loopback 设备 (OBS 虚拟摄像头)
             video_devices = sorted(glob.glob("/dev/video*"), key=lambda x: int(x.replace("/dev/video", "")))
+            obs_device_path = None
             obs_device_idx = None
             
             # 优先通过驱动名称识别 v4l2loopback 设备
@@ -2617,14 +2618,51 @@ class VideoSource:
                         capture_output=True, text=True, timeout=2
                     )
                     if "v4l2 loopback" in result.stdout.lower() or "obs" in result.stdout.lower():
+                        obs_device_path = device
                         obs_device_idx = idx
                         print(f"🎯 检测到 OBS 虚拟摄像头: {device}")
                         break
                 except Exception:
                     continue
             
-            # 如果找到了 v4l2loopback 设备，直接使用
-            if obs_device_idx is not None:
+            # 🔧 在 Jetson Orin 等平台上，使用 GStreamer pipeline 处理 YUYV 格式
+            if obs_device_path is not None:
+                # 方法1: 使用 GStreamer pipeline (解决 YUYV 格式兼容问题)
+                gst_pipeline = (
+                    f"v4l2src device={obs_device_path} ! "
+                    "video/x-raw,format=YUY2 ! "
+                    "videoconvert ! "
+                    "video/x-raw,format=BGR ! "
+                    "appsink drop=1"
+                )
+                print(f"🚀 尝试 GStreamer pipeline: {obs_device_path}")
+                cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+                if cap.isOpened():
+                    ret, frame = cap.read()
+                    if ret and frame is not None:
+                        print(f"✅ GStreamer 成功打开 OBS 虚拟摄像头 (设备 {obs_device_idx})")
+                        current_stats["stream_mode"] = "obs"
+                        return cap, 30
+                    cap.release()
+                    print("⚠️  GStreamer 打开成功但无法读取帧")
+                else:
+                    print("⚠️  GStreamer pipeline 打开失败，尝试直接 V4L2...")
+                
+                # 方法2: 直接使用 V4L2 (传统方式)
+                cap = cv2.VideoCapture(obs_device_idx, cv2.CAP_V4L2)
+                if cap.isOpened():
+                    # 设置较小的分辨率以提高兼容性
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 减少缓冲延迟
+                    ret, frame = cap.read()
+                    if ret and frame is not None:
+                        print(f"✅ V4L2 成功打开 OBS 虚拟摄像头 (设备 {obs_device_idx})")
+                        current_stats["stream_mode"] = "obs"
+                        return cap, 30
+                    cap.release()
+                
+                # 方法3: 不指定后端 (OpenCV 自动选择)
                 cap = cv2.VideoCapture(obs_device_idx)
                 if cap.isOpened():
                     ret, frame = cap.read()
@@ -2637,6 +2675,23 @@ class VideoSource:
             # 后备：从高设备号开始尝试（v4l2loopback 通常在较高设备号）
             for i in range(15, -1, -1):
                 try:
+                    # 优先使用 GStreamer
+                    gst_pipeline = (
+                        f"v4l2src device=/dev/video{i} ! "
+                        "videoconvert ! "
+                        "video/x-raw,format=BGR ! "
+                        "appsink drop=1"
+                    )
+                    cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+                    if cap.isOpened():
+                        ret, frame = cap.read()
+                        if ret and frame is not None:
+                            print(f"✅ GStreamer 找到可用摄像头 (设备 {i})")
+                            current_stats["stream_mode"] = "obs"
+                            return cap, 30
+                        cap.release()
+                    
+                    # 后备直接打开
                     cap = cv2.VideoCapture(i)
                     if cap.isOpened():
                         ret, frame = cap.read()
