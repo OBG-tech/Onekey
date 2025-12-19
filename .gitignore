@@ -1,29 +1,31 @@
-# �?境变量配�?
+# �?境变量配�?
 .env.local
 
 install_cusparselt.sh
 
-# Python缓存和编译文�?
+log.txt
+
+# Python缓存和编译文�?
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 
-# 虚拟�?�?
+# 虚拟�?�?
 .venv/
 venv/
 ENV/
 
-# 数据存储�?录（视�?�、图片等�?
+# 数据存储�?录（视�?�、图片等�?
 integrated_data/
 archives/
-# - 包含 key_moments/ (关键时刻视�?�和图片)
-# - 包含 face_database/ (人脸数据库图�?)
-# - 包含 snapshots/ (�?照图�?)
-# - 包含 keyframes/ (关键帧图�?)
+# - 包含 key_moments/ (关键时刻视�?�和图片)
+# - 包含 face_database/ (人脸数据库图�?)
+# - 包含 snapshots/ (�?照图�?)
+# - 包含 keyframes/ (关键帧图�?)
 
-# 预�??练模型文件（通常很大，不应提交到Git�?
+# 预�??练模型文件（通常很大，不应提交到Git�?
 pretrained_models/
 pretrained_models/FireRedASR-AED-L/model.pth.tar
 *.pth
