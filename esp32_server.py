@@ -1,3 +1,5 @@
+# ===== 文件2：Ubuntu / Python 服务端 esp32_server.py（无 emoji，可直接运行）=====
+# -*- coding: utf-8 -*-
 import socket
 import select
 import time
@@ -5,191 +7,173 @@ import os
 import requests
 from datetime import datetime
 
-HOST = ''        
-PORT = 5000      
+HOST = ''
+PORT = 5000
 
-# TCP Keepalive 参数（Linux）
-TCP_KEEPIDLE = 4   # socket.TCP_KEEPIDLE
-TCP_KEEPINTVL = 5  # socket.TCP_KEEPINTVL  
-TCP_KEEPCNT = 6    # socket.TCP_KEEPCNT
+TCP_KEEPIDLE = getattr(socket, "TCP_KEEPIDLE", 4)
+TCP_KEEPINTVL = getattr(socket, "TCP_KEEPINTVL", 5)
+TCP_KEEPCNT = getattr(socket, "TCP_KEEPCNT", 6)
+TCP_USER_TIMEOUT = getattr(socket, "TCP_USER_TIMEOUT", 18)  # Linux 常见；不支持则跳过
 
-# 日志文件路径
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "button_log.txt")
-
-# 系统API地址
 API_BASE_URL = "http://localhost:8082"
+
 
 def trigger_key_moment(button_number):
     """触发创建关键时刻（带重试机制）"""
     max_retries = 3
     retry_delay = 0.5
-    
+
     for attempt in range(max_retries):
         try:
             url = f"{API_BASE_URL}/api/mark_moment"
-            payload = {
-                "note": f"🎮 按钮 {button_number}"
-            }
-            response = requests.post(url, json=payload, timeout=10)  # 增加超时到10秒（AI分析时可能较慢）
+            payload = {"note": f"button {button_number}"}
+            response = requests.post(url, json=payload, timeout=10)
+
             if response.status_code == 200:
-                print(f"✅ 关键时刻已创建: 按钮 {button_number} (尝试 {attempt + 1}/{max_retries})")
+                print(f"Moment created: button {button_number} (try {attempt + 1}/{max_retries})")
                 return True
             else:
-                print(f"⚠️  创建关键时刻失败: {response.status_code} (尝试 {attempt + 1}/{max_retries})")
+                print(f"Moment create failed: {response.status_code} (try {attempt + 1}/{max_retries})")
+
         except requests.exceptions.Timeout:
-            # 超时时只在最后一次尝试才打印错误，避免刷屏
             if attempt == max_retries - 1:
-                print(f"⏱️  API超时（系统可能正在进行AI分析）- 按钮 {button_number} 已记录但创建可能延迟")
+                print(f"API timeout, button {button_number} recorded but moment may be delayed")
         except Exception as e:
             if attempt == max_retries - 1:
-                print(f"❌ 调用API失败: {e}")
-        
+                print(f"API call failed: {e}")
+
         if attempt < max_retries - 1:
             time.sleep(retry_delay)
-    
+
     return False
+
 
 def save_button_press(button_number):
     """保存按钮消息和时间到文件，并触发创建关键时刻"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_line = f"{timestamp} - 按钮: {button_number}\n"
+    log_line = f"{timestamp} - button: {button_number}\n"
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(log_line)
-    print(f"已记录: {log_line.strip()}")
-    
-    # 自动触发创建关键时刻
+    print(f"Recorded: {log_line.strip()}")
+
     trigger_key_moment(button_number)
+
 
 def start_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # 允许端口重用，避免 "Address already in use" 错误
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind((HOST, PORT))
-    server.listen(5)  # 增加 backlog
-    server.setblocking(False)  # 非阻塞模式
-    
-    print(f"服务器启动，监听端口 {PORT} ...")
-    print("等待 ESP32 连接（可以先启动服务器，ESP32 连接 WiFi 后会自动连接）...")
-    
-    clients = {}  # {socket: (addr, last_activity_time)}
-    
+    server.listen(5)
+    server.setblocking(False)
+
+    print(f"Server started, listening on {PORT} ...")
+    print("Waiting for ESP32 connection...")
+
+    # clients: {sock: {"addr": (ip,port), "last": ts, "buf": bytes}}
+    clients = {}
+
     def close_client(sock, reason=""):
-        """安全关闭客户端连接"""
         if sock in clients:
-            addr = clients[sock][0]
+            addr = clients[sock]["addr"]
             try:
                 sock.close()
-            except:
+            except Exception:
                 pass
             del clients[sock]
-            print(f"连接已关闭 [{addr}]: {reason}")
-            print(f"当前连接数: {len(clients)}")
-    
+            print(f"Connection closed [{addr}]: {reason}")
+            print(f"Current connections: {len(clients)}")
+
     def close_old_connections_from_ip(new_ip):
-        """关闭来自同一 IP 的旧连接（ESP32 重启时）"""
         to_close = []
-        for sock, (addr, _) in clients.items():
-            if addr[0] == new_ip:
-                to_close.append(sock)
-        for sock in to_close:
-            close_client(sock, "同 IP 新连接，关闭旧连接")
-    
-    def check_dead_connections():
-        """检测并关闭死连接（仅通过发送心跳包检测，不基于活动时间）"""
-        to_close = []
-        for sock, (addr, _) in clients.items():
-            try:
-                # 尝试发送心跳包检测连接是否存活
-                # TCP keepalive 会自动处理底层连接检测
-                # 这里只是额外的主动检测
-                sock.send(b'\x00')
-            except (ConnectionResetError, BrokenPipeError, OSError):
-                to_close.append((sock, "心跳检测失败 - 连接已断开"))
-            except BlockingIOError:
-                pass  # 发送缓冲区满，连接可能还活着
-        for sock, reason in to_close:
-            close_client(sock, reason)
-    
-    last_check_time = time.time()
-    
+        for s, info in clients.items():
+            if info["addr"][0] == new_ip:
+                to_close.append(s)
+        for s in to_close:
+            close_client(s, "New connection from same IP, closing old one")
+
+    def tune_socket(conn: socket.socket):
+        conn.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        try:
+            conn.setsockopt(socket.IPPROTO_TCP, TCP_KEEPIDLE, 5)
+            conn.setsockopt(socket.IPPROTO_TCP, TCP_KEEPINTVL, 2)
+            conn.setsockopt(socket.IPPROTO_TCP, TCP_KEEPCNT, 3)
+        except Exception:
+            pass
+
+        # 可选：更快识别死链（不支持就忽略）
+        try:
+            conn.setsockopt(socket.IPPROTO_TCP, TCP_USER_TIMEOUT, 15000)  # ms
+        except Exception:
+            pass
+
     try:
         while True:
-            # 使用 select 同时监听服务器和所有客户端
             readable = [server] + list(clients.keys())
             try:
                 ready, _, _ = select.select(readable, [], [], 1.0)
-            except select.error:
+            except Exception:
                 continue
-            
-            # 每 5 秒检测一次死连接
-            now = time.time()
-            if now - last_check_time > 5:
-                check_dead_connections()
-                last_check_time = now
-            
+
             for sock in ready:
                 if sock is server:
-                    # 新连接
                     try:
                         conn, addr = server.accept()
-                        
-                        # 关闭来自同一 IP 的旧连接
                         close_old_connections_from_ip(addr[0])
-                        
+
                         conn.setblocking(False)
-                        # 启用 TCP keepalive 并设置激进的参数
-                        conn.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-                        try:
-                            # 5秒后开始发送 keepalive
-                            conn.setsockopt(socket.IPPROTO_TCP, TCP_KEEPIDLE, 5)
-                            # 每 2 秒发送一次
-                            conn.setsockopt(socket.IPPROTO_TCP, TCP_KEEPINTVL, 2)
-                            # 3 次失败后断开
-                            conn.setsockopt(socket.IPPROTO_TCP, TCP_KEEPCNT, 3)
-                        except:
-                            pass  # 某些系统可能不支持这些选项
-                        
-                        clients[conn] = (addr, time.time())
-                        print(f'\nESP32 已连接: {addr}')
-                        print(f"当前连接数: {len(clients)}")
+                        tune_socket(conn)
+
+                        clients[conn] = {"addr": addr, "last": time.time(), "buf": b""}
+                        print(f"ESP32 connected: {addr}")
+                        print(f"Current connections: {len(clients)}")
                     except Exception as e:
-                        print(f"接受连接时出错: {e}")
+                        print(f"Accept error: {e}")
                 else:
-                    # 现有连接有数据
                     if sock not in clients:
                         continue
-                    addr = clients[sock][0]
+                    addr = clients[sock]["addr"]
                     try:
                         data = sock.recv(1024)
                         if data:
-                            # 过滤掉心跳包
-                            if data != b'\x00':
-                                msg = data.decode(errors='ignore').strip()
-                                print(f"收到数据 [{addr}]: {msg}")
-                                # 如果是 1-10 的数字，保存到文件
+                            clients[sock]["last"] = time.time()
+                            clients[sock]["buf"] += data
+
+                            # ESP32 println -> line based
+                            while b"\n" in clients[sock]["buf"]:
+                                line, rest = clients[sock]["buf"].split(b"\n", 1)
+                                clients[sock]["buf"] = rest
+
+                                msg = line.decode(errors="ignore").strip()
+                                if not msg:
+                                    continue
+
+                                if msg == "PING":
+                                    continue
+
+                                print(f"Recv [{addr}]: {msg}")
+
                                 if msg.isdigit() and 1 <= int(msg) <= 10:
                                     save_button_press(msg)
-                            # 更新活动时间
-                            clients[sock] = (addr, time.time())
                         else:
-                            # 连接正常关闭
-                            close_client(sock, "对方关闭连接")
+                            close_client(sock, "Peer closed")
                     except ConnectionResetError:
-                        close_client(sock, "连接被重置")
+                        close_client(sock, "Connection reset")
                     except BlockingIOError:
                         pass
                     except Exception as e:
-                        close_client(sock, f"错误: {e}")
-                            
+                        close_client(sock, f"Error: {e}")
+
     except KeyboardInterrupt:
-        print("\n服务器关闭")
+        print("Server stopped")
     finally:
-        for sock in list(clients.keys()):
+        for s in list(clients.keys()):
             try:
-                sock.close()
-            except:
+                s.close()
+            except Exception:
                 pass
         server.close()
+
 
 if __name__ == "__main__":
     start_server()
