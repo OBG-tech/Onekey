@@ -2037,8 +2037,8 @@ class KeyMomentsManager:
             
             result = json.loads(result_text)
             
-            # 如果是关键时刻，记录（阈值0.35，提高灵敏度）
-            if result.get("is_key_moment", False) and result.get("importance", 0) > 0.35:
+            # 如果是关键时刻，记录（阈值0.3，提高灵敏度）
+            if result.get("is_key_moment", False) and result.get("importance", 0) > 0.3:
                 self._record_ai_moment(
                     frame=frame,
                     frame_number=frame_number,
