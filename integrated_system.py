@@ -315,12 +315,14 @@ BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "integrated_data"
 FACE_DB_PATH = DATA_DIR / "face_database"
 ANALYSIS_PATH = DATA_DIR / "analysis_results"
+LOGS_PATH = DATA_DIR / "logs"
+ANALYSIS_LOG_FILE = LOGS_PATH / "analysis.log"
 KEYFRAME_PATH = DATA_DIR / "key_frames"
 SNAPSHOT_PATH = DATA_DIR / "snapshots"
 KEY_MOMENTS_PATH = DATA_DIR / "key_moments"  # 关键时刻目录
 
 # 创建必要目录
-for path in [DATA_DIR, FACE_DB_PATH, ANALYSIS_PATH, KEYFRAME_PATH, SNAPSHOT_PATH, KEY_MOMENTS_PATH]:
+for path in [DATA_DIR, FACE_DB_PATH, ANALYSIS_PATH, KEYFRAME_PATH, SNAPSHOT_PATH, KEY_MOMENTS_PATH, LOGS_PATH]:
     path.mkdir(exist_ok=True, parents=True)
 
 # ============================================================
@@ -692,6 +694,9 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         
         elif self.path == '/api/button_log':
             self._handle_button_log()
+
+        elif self.path == '/api/analysis_log':
+            self._handle_analysis_log()
 
         elif self.path.startswith('/api/linkography'):
             self.send_json_response(self._get_linkography())
@@ -1252,10 +1257,38 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
                         continue
             
             self.send_json_response(button_presses)
-            
+        
         except Exception as e:
             print(f"❌ 读取按钮日志失败: {e}")
             self.send_json_response([])
+    
+    def _handle_analysis_log(self):
+        """返回分析日志（analysis.log）的末尾内容"""
+        try:
+            params = self._get_query_params()
+            try:
+                tail_lines = int(params.get("lines", 200))
+            except Exception:
+                tail_lines = 200
+            tail_lines = max(10, min(1000, tail_lines))
+
+            log_path = ANALYSIS_LOG_FILE
+            if not log_path.exists():
+                self.send_json_response({"lines": [], "path": str(log_path)})
+                return
+
+            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+
+            tail = [ln.rstrip("\n") for ln in lines[-tail_lines:]]
+            self.send_json_response({
+                "lines": tail,
+                "path": str(log_path),
+                "total_lines": len(lines)
+            })
+        except Exception as e:
+            print(f"⚠️ 读取分析日志失败: {e}")
+            self.send_json_response({"lines": [], "path": str(ANALYSIS_LOG_FILE)})
     
     def _handle_key_moments_stats(self):
         """包装统计方法"""

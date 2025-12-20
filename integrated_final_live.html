@@ -6211,6 +6211,110 @@
         // 页面加载后初始化视频显示
         initVideoDisplay();
 
+        // =========================================================
+        // 📝 分析日志查看 (analysis.log)
+        // =========================================================
+        (() => {
+            const wrap = document.createElement('div');
+            wrap.id = 'analysis-log-widget';
+            wrap.style.position = 'fixed';
+            wrap.style.bottom = '12px';
+            wrap.style.left = '12px';
+            wrap.style.width = '360px';
+            wrap.style.maxHeight = '220px';
+            wrap.style.background = 'rgba(0,0,0,0.7)';
+            wrap.style.color = '#d8f4ff';
+            wrap.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+            wrap.style.fontSize = '12px';
+            wrap.style.border = '1px solid rgba(255,255,255,0.15)';
+            wrap.style.borderRadius = '10px';
+            wrap.style.boxShadow = '0 10px 30px rgba(0,0,0,0.45)';
+            wrap.style.backdropFilter = 'blur(6px)';
+            wrap.style.display = 'flex';
+            wrap.style.flexDirection = 'column';
+            wrap.style.zIndex = '999';
+
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.alignItems = 'center';
+            header.style.justifyContent = 'space-between';
+            header.style.padding = '8px 10px';
+            header.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
+            header.innerHTML = `<div style="font-weight:700;">📜 分析日志</div>`;
+
+            const btns = document.createElement('div');
+            const refreshBtn = document.createElement('button');
+            refreshBtn.textContent = '刷新';
+            refreshBtn.style.marginRight = '8px';
+            refreshBtn.style.padding = '4px 8px';
+            refreshBtn.style.border = '1px solid rgba(255,255,255,0.2)';
+            refreshBtn.style.background = 'rgba(255,255,255,0.08)';
+            refreshBtn.style.color = '#fff';
+            refreshBtn.style.borderRadius = '6px';
+            refreshBtn.style.cursor = 'pointer';
+
+            const toggleBtn = document.createElement('button');
+            toggleBtn.textContent = '折叠';
+            toggleBtn.style.padding = '4px 8px';
+            toggleBtn.style.border = '1px solid rgba(255,255,255,0.2)';
+            toggleBtn.style.background = 'rgba(255,255,255,0.08)';
+            toggleBtn.style.color = '#fff';
+            toggleBtn.style.borderRadius = '6px';
+            toggleBtn.style.cursor = 'pointer';
+
+            btns.appendChild(refreshBtn);
+            btns.appendChild(toggleBtn);
+            header.appendChild(btns);
+
+            const body = document.createElement('div');
+            body.style.flex = '1';
+            body.style.overflow = 'auto';
+            body.style.padding = '8px 10px';
+
+            const pre = document.createElement('pre');
+            pre.id = 'analysis-log-content';
+            pre.style.margin = '0';
+            pre.style.whiteSpace = 'pre-wrap';
+            pre.style.wordBreak = 'break-word';
+            pre.textContent = '加载中...';
+
+            body.appendChild(pre);
+            wrap.appendChild(header);
+            wrap.appendChild(body);
+            document.body.appendChild(wrap);
+
+            async function loadAnalysisLog() {
+                try {
+                    const res = await fetch('/api/analysis_log?lines=200');
+                    const data = await res.json();
+                    const lines = Array.isArray(data.lines) ? data.lines : [];
+                    if (!lines.length) {
+                        pre.textContent = '暂无分析日志';
+                    } else {
+                        pre.textContent = lines.join('\n');
+                    }
+                } catch (err) {
+                    pre.textContent = `读取日志失败: ${err}`;
+                }
+            }
+
+            refreshBtn.onclick = loadAnalysisLog;
+            toggleBtn.onclick = () => {
+                if (body.style.display === 'none') {
+                    body.style.display = 'block';
+                    toggleBtn.textContent = '折叠';
+                    wrap.style.maxHeight = '220px';
+                } else {
+                    body.style.display = 'none';
+                    toggleBtn.textContent = '展开';
+                    wrap.style.maxHeight = '40px';
+                }
+            };
+
+            loadAnalysisLog();
+            setInterval(loadAnalysisLog, 15000);
+        })();
+
     </script>
 </body>
 
