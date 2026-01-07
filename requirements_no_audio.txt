@@ -1,0 +1,10 @@
+opencv-python>=4.8.0
+numpy>=1.24.0
+ultralytics>=8.0.0
+lap>=0.5.12
+openai>=1.0.0
+dashscope>=1.14.0
+anthropic>=0.18.0
+kaldiio>=2.18.0
+kaldi_native_fbank>=1.15
+sentencepiece>=0.1.99

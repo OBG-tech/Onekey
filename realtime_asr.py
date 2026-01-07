@@ -540,11 +540,14 @@ class RealtimeASR:
                 callback.on_event = self._on_event
                 
                 # 创建流式识别对象
+                # 添加语言提示：只识别中文和英文
                 self.recognition = Recognition(
                     model='paraformer-realtime-v2',
                     format='pcm',
                     sample_rate=16000,
-                    callback=callback
+                    callback=callback,
+                    # 语言提示：限制为中文和英文
+                    language_hints=['zh', 'en']
                 )
                 
                 # 启动识别

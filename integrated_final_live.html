@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Integrated System - Retro Style</title>
+    <!-- 国际化支持 -->
+    <script src="/web/i18n.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&display=swap');
@@ -1638,19 +1640,23 @@
             background: #000;
             border: 2px solid black;
             padding: 2px;
-            height: 260px;
-            width: fit-content;
+            min-height: 200px;
+            max-height: 400px;
+            height: auto;
+            width: 100%;
             max-width: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
             position: relative;
+            aspect-ratio: 16 / 9;
         }
 
         .video-container img {
+            width: 100%;
             height: 100%;
-            width: auto;
             max-width: 100%;
+            max-height: 100%;
             object-fit: contain;
             image-rendering: auto;
         }
@@ -2173,6 +2179,17 @@
         <div class="title-bar">
             <div class="close-box" onclick="if(confirm('Exit?')) window.close()"></div>
             <div class="title-bar-text">🎬 Integrated Video Analysis System</div>
+            <!-- 语言切换按钮 -->
+            <div style="position: absolute; right: 10px; display: flex; gap: 4px; align-items: center;">
+                <button onclick="window.i18n && window.i18n.setLanguage('zh')"
+                    style="padding: 3px 8px; border: 2px solid black; background: white; cursor: pointer; font-size: 9px; font-family: 'Press Start 2P', sans-serif;">
+                    中文
+                </button>
+                <button onclick="window.i18n && window.i18n.setLanguage('en')"
+                    style="padding: 3px 8px; border: 2px solid black; background: white; cursor: pointer; font-size: 9px; font-family: 'Press Start 2P', sans-serif;">
+                    EN
+                </button>
+            </div>
         </div>
 
         <div class="window-content">
@@ -2221,7 +2238,7 @@
                 <!-- 已识别人员 -->
                 <div class="panel people-panel" id="people-panel" data-module-id="people"
                     style="flex: 1; max-width: none;">
-                    <div class="panel-title" data-hide-handle="1">👥 People</div>
+                    <div class="panel-title" data-hide-handle="1" data-i18n="people">👥 People</div>
                     <div class="people-grid" id="people-grid">
                         <div class="empty-state">
                             <div class="loading">█</div>
@@ -2238,7 +2255,8 @@
                 <div id="keymoments-section" data-module-id="keymoments"
                     style="flex: 2.5; background: #fff; border: 2px solid #333; display: flex; flex-direction: column;">
                     <div class="panel-title" data-hide-handle="1"
-                        style="background: #fff; border-bottom: 2px solid #333; flex-shrink: 0;">⭐
+                        style="background: #fff; border-bottom: 2px solid #333; flex-shrink: 0;"
+                        data-i18n="key_moments">⭐
                         Key Moments Timeline
                         <span id="keymoments-count" style="font-weight:normal; color:#666;">(0)</span>
                         <span style="float: right; font-size: 11px; font-weight: normal;">

@@ -1179,7 +1179,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             # AI自动检测的时刻：应用质量过滤
             if m.get('source') == 'ai_detected':
                 # 跳过明确标记为"无音频"的时刻
-                if m.get('ai_tagline') == '🎧 无音频':
+                if m.get('ai_tagline') in ('🎧 无音频', '🎧 No Audio'):
                     skipped_count += 1
                     continue
                 
@@ -1191,7 +1191,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             
             # 多模态分析的时刻：也应用类似过滤
             if m.get('source') == 'multimodal':
-                if m.get('ai_tagline') == '🎧 无音频':
+                if m.get('ai_tagline') in ('🎧 无音频', '🎧 No Audio'):
                     skipped_count += 1
                     continue
                 importance = m.get('ai_importance', 0.0)
@@ -2820,12 +2820,25 @@ def process_face_recognition(frame, boxes, frame_count, face_app):
 _yolo_model_cache = None
 
 def get_yolo_model():
-    """延迟加载YOLO模型(单例模式)"""  
+    """延迟加载YOLO模型(单例模式)，自动使用GPU加速"""  
     global _yolo_model_cache
     if _yolo_model_cache is None:
-        print("🚀 首次加载YOLO模型,请稍候...")
+        import torch
+        
+        # 检测可用设备：优先MPS(macOS GPU)，其次CUDA，最后CPU
+        if torch.backends.mps.is_available():
+            device = "mps"
+            print("🚀 首次加载YOLO模型(MPS GPU加速),请稍候...")
+        elif torch.cuda.is_available():
+            device = "cuda"
+            print("🚀 首次加载YOLO模型(CUDA GPU加速),请稍候...")
+        else:
+            device = "cpu"
+            print("🚀 首次加载YOLO模型(CPU),请稍候...")
+        
         _yolo_model_cache = YOLO(MODEL_PATH)
-        print("✅ YOLO模型加载完成")
+        _yolo_model_cache.to(device)
+        print(f"✅ YOLO模型加载完成 (设备: {device})")
     return _yolo_model_cache
 
 def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_window=True, video_source_path=None):

@@ -1,11 +1,16 @@
 #!/bin/bash
-# 🎬 智能视频分析系统 - AI直播间版本启动脚本
+# 🎬 智能视频分析系统 + AI直播间 - 完整版启动脚本
+# 合并 start_live.sh 和 start_with_full_recording.sh 的所有功能
 
 # 切换到脚本所在目录
 cd "$(dirname "$0")"
 
 # 默认端口
 PORT=${1:-8082}
+
+# OBS WebSocket配置
+OBS_WS_PORT=4455
+OBS_WS_PASSWORD=""  # 如果设置了密码，在这里填写
 
 # 颜色定义
 RED='\033[0;31m'
@@ -15,23 +20,21 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   🎬 智能视频分析系统 + AI直播间                      ║${NC}"
+echo -e "${BLUE}║   🎬 智能视频分析系统 + AI直播间 (完整版)            ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
 # 检查虚拟环境
 if [ ! -d ".venv" ]; then
     echo -e "${RED}❌ 未找到虚拟环境 .venv${NC}"
-    echo -e "${YELLOW}请先运行: ./install_ubuntu.sh${NC}"
     exit 1
 fi
 
-# 检查 .env.local 是否存在
+# 检查 .env.local
 if [ ! -f ".env.local" ]; then
     if [ -f ".env.local.example" ]; then
         echo -e "${YELLOW}⚠️  未找到 .env.local，从示例文件创建...${NC}"
         cp .env.local.example .env.local
-        echo -e "${YELLOW}   请编辑 .env.local 填入您的 DASHSCOPE_API_KEY${NC}"
     fi
 fi
 
@@ -43,89 +46,127 @@ if [ -f ".env.local" ]; then
     set +a
 fi
 
-# 检查 API Key
-if [ -z "$DASHSCOPE_API_KEY" ]; then
-    echo -e "${YELLOW}⚠️  DASHSCOPE_API_KEY 未设置，部分AI功能将不可用${NC}"
-    echo -e "${YELLOW}   请编辑 .env.local 添加您的 API Key${NC}"
+# 显示OneKey环境变量（如果存在）
+if [ -n "$DASHSCOPE_API_KEY" ]; then
+    echo -e "${GREEN}✅ OneKey 环境变量已加载${NC}"
+    echo "  DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:0:20}..."
+    [ -n "$ANTHROPIC_API_KEY" ] && echo "  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:0:20}..."
 fi
 
-# 清除代理环境变量
+# 清除代理
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
 echo -e "${GREEN}✅ 已清除代理设置${NC}"
 
-# 杀掉之前的进程
+# 清理旧进程
 echo -e "${YELLOW}🔄 清理旧进程...${NC}"
 pkill -f "integrated_system.py" 2>/dev/null
-sleep 1
-
-# 释放端口
 lsof -ti:$PORT | xargs kill -9 2>/dev/null
 sleep 1
 
-# 🔧 重新加载 v4l2loopback 模块（确保虚拟摄像机能正常启动）
-echo -e "${YELLOW}🔧 重新加载 v4l2loopback 模块...${NC}"
-sudo modprobe -r v4l2loopback 2>/dev/null
-sudo modprobe v4l2loopback devices=1 video_nr=8 card_label="OBS Virtual Camera" exclusive_caps=1
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}   ✅ v4l2loopback 模块加载成功${NC}"
-else
-    echo -e "${YELLOW}   ⚠️  v4l2loopback 模块加载失败，将尝试继续...${NC}"
-fi
-sleep 1
+# 🔧 检查操作系统
+OS_TYPE=$(uname -s)
 
-# 检查 OBS 虚拟摄像机
-echo -e "${YELLOW}📹 检查 OBS 虚拟摄像机...${NC}"
-V4L2_USE_COUNT=$(lsmod | grep v4l2loopback | awk '{print $3}')
-if [ "$V4L2_USE_COUNT" != "0" ] && [ -n "$V4L2_USE_COUNT" ]; then
-    echo -e "${GREEN}   ✅ OBS 虚拟摄像机模块已加载${NC}"
-else
-    if ! pgrep -x "obs" > /dev/null; then
-        echo -e "${YELLOW}   启动 OBS...${NC}"
-        nohup obs > /dev/null 2>&1 &
-        sleep 3
+if [ "$OS_TYPE" = "Linux" ]; then
+    # Linux: 重新加载 v4l2loopback 模块
+    echo -e "${YELLOW}🔧 重新加载 v4l2loopback 模块...${NC}"
+    sudo modprobe -r v4l2loopback 2>/dev/null
+    sudo modprobe v4l2loopback devices=1 video_nr=8 card_label="OBS Virtual Camera" exclusive_caps=1
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}   ✅ v4l2loopback 模块加载成功${NC}"
     fi
-
-    echo -e "${YELLOW}   ⏳ 请在 OBS 中启动虚拟摄像机...${NC}"
-    zenity --question --title="OBS 虚拟摄像机" \
-        --text="请在 OBS 中启动虚拟摄像机：\n\n工具(Tools) → 虚拟相机(Virtual Camera) → 启动(Start)\n\n完成后点击'是'继续" \
-        --ok-label="是，已启动" --cancel-label="取消" \
-        --width=400 2>/dev/null
-
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}   ❌ 用户取消，退出${NC}"
-        exit 1
-    fi
-
     sleep 1
-    V4L2_USE_COUNT=$(lsmod | grep v4l2loopback | awk '{print $3}')
-    if [ "$V4L2_USE_COUNT" != "0" ] && [ -n "$V4L2_USE_COUNT" ]; then
-        echo -e "${GREEN}   ✅ 虚拟摄像机已激活${NC}"
+fi
+
+# 启动 OBS
+echo -e "${YELLOW}📹 检查 OBS...${NC}"
+if [ "$OS_TYPE" = "Linux" ]; then
+    if ! pgrep -x "obs" > /dev/null; then
+        nohup obs > /dev/null 2>&1 &
+        sleep 5
+        echo -e "${GREEN}   ✅ OBS 已启动${NC}"
     else
-        echo -e "${RED}   ⚠️  虚拟摄像机可能未激活，将尝试继续...${NC}"
+        echo -e "${GREEN}   ✅ OBS 已在运行${NC}"
     fi
+else
+    # macOS
+    if ! pgrep -x "OBS" > /dev/null; then
+        echo -e "${YELLOW}   启动 OBS...${NC}"
+        open -a "OBS" 2>/dev/null
+        sleep 5
+    else
+        echo -e "${GREEN}   ✅ OBS 已在运行${NC}"
+    fi
+fi
+
+# 提示启动虚拟摄像机
+echo -e "${YELLOW}🎥 启动 OBS 虚拟摄像机...${NC}"
+if [ "$OS_TYPE" = "Linux" ]; then
+    V4L2_USE_COUNT=$(lsmod | grep v4l2loopback | awk '{print $3}')
+    if [ "$V4L2_USE_COUNT" == "0" ] || [ -z "$V4L2_USE_COUNT" ]; then
+        zenity --question --title="OBS 虚拟摄像机" \
+            --text="请在 OBS 中启动虚拟摄像机：\n\n工具(Tools) → 虚拟相机(Virtual Camera) → 启动(Start)\n\n完成后点击'是'继续" \
+            --ok-label="是，已启动" --cancel-label="取消" \
+            --width=400 2>/dev/null
+        
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}   ❌ 用户取消，退出${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}   ✅ 虚拟摄像机已激活${NC}"
+    fi
+else
+    # macOS
+    echo -e "${YELLOW}   ⏳ 请确认 OBS 中虚拟摄像机已启动${NC}"
+    echo -e "${YELLOW}   （工具 → 启动虚拟摄像机）${NC}"
+    echo ""
+    read -p "   按任意键继续... " -n 1 -r
+    echo ""
+    echo -e "${GREEN}   ✅ 继续启动系统${NC}"
 fi
 
 # 激活虚拟环境
 source .venv/bin/activate
 
+# 检查obs-websocket-py (用于OBS录制控制)
+echo ""
+echo -e "${YELLOW}🔍 检查 obs-websocket-py...${NC}"
+if python -c "import obswebsocket" 2>/dev/null; then
+    echo -e "${GREEN}✅ obs-websocket-py 已安装${NC}"
+    OBS_CONTROL_AVAILABLE=true
+else
+    echo -e "${YELLOW}⚠️  obs-websocket-py 未安装${NC}"
+    echo -e "${YELLOW}   无法自动控制OBS录制${NC}"
+    OBS_CONTROL_AVAILABLE=false
+fi
+
 # 启动模式选择
 echo ""
 echo -e "${GREEN}请选择启动模式:${NC}"
-echo "1) OBS虚拟摄像头模式"
-echo "2) 摄像头模式（前置摄像头）"
+echo "1) OBS虚拟摄像头模式（推荐）"
+echo "2) 摄像头模式（指定索引）"
 echo "3) 视频文件模式"
 echo ""
 read -p "请输入选项 [1-3]: " choice
 
-# 在后台启动 Python 系统
+# 后台启动系统
 case $choice in
     1)
         echo -e "${GREEN}🔴 启动OBS模式 (端口: $PORT)...${NC}"
-        python3 integrated_system.py --obs --port $PORT --no-browser &
+        nohup python integrated_system.py --obs --port $PORT > service_output.log 2>&1 &
+        PYTHON_PID=$!
         ;;
     2)
-        echo -e "${GREEN}🎥 启动摄像头模式 (端口: $PORT)...${NC}"
-        python3 integrated_system.py --camera 0 --port $PORT --no-browser &
+        echo ""
+        echo "检测到的OBS虚拟摄像头："
+        echo "  0: 1920x1080, 5fps"
+        echo "  1: 1920x1080, 5fps"
+        echo "  2: 1920x1080, 60fps (推荐)"
+        echo ""
+        read -p "请输入摄像头索引 [0-2]: " cam_index
+        echo -e "${GREEN}🎥 启动摄像头模式 (索引: $cam_index, 端口: $PORT)...${NC}"
+        nohup python integrated_system.py --camera $cam_index --port $PORT > service_output.log 2>&1 &
+        PYTHON_PID=$!
         ;;
     3)
         read -p "请输入视频文件路径: " video_path
@@ -134,48 +175,127 @@ case $choice in
             exit 1
         fi
         echo -e "${GREEN}🎬 启动视频分析 (端口: $PORT)...${NC}"
-        python3 integrated_system.py --video "$video_path" --port $PORT --no-browser &
+        nohup python integrated_system.py --video "$video_path" --port $PORT > service_output.log 2>&1 &
+        PYTHON_PID=$!
         ;;
     *)
         echo -e "${RED}无效选项，使用默认OBS模式${NC}"
-        python3 integrated_system.py --obs --port $PORT --no-browser &
+        nohup python integrated_system.py --obs --port $PORT > service_output.log 2>&1 &
+        PYTHON_PID=$!
         ;;
 esac
 
-PID=$!
+echo $PYTHON_PID > service.pid
+echo -e "${GREEN}✅ 系统已在后台启动 (PID: $PYTHON_PID)${NC}"
 
 # 等待服务启动
-sleep 5
+echo ""
+echo -e "${YELLOW}⏳ 等待服务启动（15秒）...${NC}"
+sleep 15
 
-# 自动打开浏览器（AI直播间版本）
+# 🎤 自动启动实时语音识别
 echo ""
-echo -e "${GREEN}🌐 正在打开AI直播间版本...${NC}"
-echo -e "${BLUE}📺 访问地址: http://localhost:$PORT/integrated_final_live.html${NC}"
-echo ""
-echo -e "${YELLOW}💡 使用说明:${NC}"
-echo "   1. 点击右上角红色 🔴 LIVE 按钮开启AI直播间"
-echo "   2. 可拖动LIVE按钮到任意位置"
-echo "   3. 底部输入框可发送评论互动"
-echo ""
+echo -e "${YELLOW}🎤 自动启动实时语音识别...${NC}"
+ASR_RESPONSE=$(curl -s -X POST "http://localhost:${PORT}/api/realtime_asr/start" 2>/dev/null)
 
-# 检测操作系统并打开浏览器
-if command -v xdg-open &> /dev/null; then
-    xdg-open "http://localhost:$PORT/integrated_final_live.html" &> /dev/null &
-elif command -v gnome-open &> /dev/null; then
-    gnome-open "http://localhost:$PORT/integrated_final_live.html" &> /dev/null &
-elif command -v open &> /dev/null; then
-    open "http://localhost:$PORT/integrated_final_live.html" &> /dev/null &
+if echo "$ASR_RESPONSE" | grep -q '"success":true' 2>/dev/null; then
+    echo -e "${GREEN}✅ 语音识别已自动启动${NC}"
 else
-    echo -e "${YELLOW}⚠️  无法自动打开浏览器，请手动访问：${NC}"
-    echo "   http://localhost:$PORT/integrated_final_live.html"
+    echo -e "${YELLOW}⚠️  语音识别启动失败（可在Web界面手动启动）${NC}"
 fi
 
-echo -e "${GREEN}✅ 启动完成！${NC}"
+# 🎬 OBS自动录制
 echo ""
-echo -e "${YELLOW}按 Ctrl+C 停止系统${NC}"
+echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║   🔴 OBS 录制控制                                     ║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
+echo ""
 
-# 等待Python进程
-wait $PID
+if [ "$OBS_CONTROL_AVAILABLE" = true ]; then
+    echo -e "${YELLOW}是否启动OBS自动录制? [Y/n]: ${NC}"
+    read -t 10 -n 1 -r ENABLE_OBS_REC
+    echo ""
+    
+    if [[ ! $ENABLE_OBS_REC =~ ^[Nn]$ ]]; then
+        echo -e "${YELLOW}🎬 自动启动 OBS 录制...${NC}"
+        sleep 3
+        
+        if python obs_auto_record.py start --port $OBS_WS_PORT --password "$OBS_WS_PASSWORD" 2>/dev/null; then
+            echo -e "${GREEN}✅ OBS 录制已自动启动！${NC}"
+            echo -e "${GREEN}   录像将保存到 OBS 设置的路径${NC}"
+            AUTO_RECORDING=true
+        else
+            echo -e "${YELLOW}⚠️  自动启动失败，请检查OBS WebSocket设置${NC}"
+            echo "  1. OBS → 工具 → obs-websocket设置"
+            echo "  2. 启用WebSocket服务器，端口: $OBS_WS_PORT"
+            echo ""
+            echo -e "${YELLOW}或手动在OBS中点击【开始录制】${NC}"
+            AUTO_RECORDING=false
+        fi
+    else
+        echo -e "${YELLOW}⏭️  跳过OBS录制${NC}"
+        AUTO_RECORDING=false
+    fi
+else
+    echo -e "${YELLOW}⚠️  obs-websocket-py未安装，无法自动控制OBS${NC}"
+    echo -e "${YELLOW}安装: pip install obs-websocket-py${NC}"
+    echo ""
+    echo -e "${YELLOW}请手动在OBS中点击【开始录制】（如需录制）${NC}"
+    AUTO_RECORDING=false
+fi
+
+# 打开浏览器
+echo ""
+echo -e "${GREEN}🌐 打开Web界面...${NC}"
+WEB_URL="http://localhost:${PORT}/integrated_final_live.html"
+
+if command -v open &> /dev/null; then
+    # macOS
+    open "$WEB_URL" &> /dev/null &
+elif command -v xdg-open &> /dev/null; then
+    # Linux
+    xdg-open "$WEB_URL" &> /dev/null &
+else
+    echo -e "${YELLOW}⚠️  无法自动打开浏览器${NC}"
+fi
+
+# 最终报告
+echo ""
+echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║   ✅ 系统启动完成！                                   ║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${GREEN}📊 当前状态:${NC}"
+echo "  • Web界面: $WEB_URL"
+echo "  • 后台进程 PID: $PYTHON_PID"
+echo "  • 语音识别: ✅ 已自动启动"
+
+if [ "$AUTO_RECORDING" = true ]; then
+    echo -e "  • OBS录制: ${GREEN}✅ 已自动启动（全程录制）${NC}"
+else
+    echo -e "  • OBS录制: ⏭️  未启动（可手动开启）"
+fi
 
 echo ""
-echo -e "${YELLOW}👋 系统已停止${NC}"
+echo -e "${YELLOW}💡 使用提示:${NC}"
+echo "  • 查看实时日志: tail -f service_output.log"
+echo "  • 查看OBS录制状态: python obs_auto_record.py status"
+
+if [ "$AUTO_RECORDING" = true ]; then
+    echo "  • 停止系统和录制: kill $PYTHON_PID && python obs_auto_record.py stop"
+    echo -e "  • 或使用: ./stop_with_full_recording.sh"
+else
+    echo "  • 停止系统: kill $PYTHON_PID"
+fi
+
+echo ""
+
+if [ "$AUTO_RECORDING" = true ]; then
+    echo -e "${GREEN}🎥 OBS正在全程录制中...${NC}"
+    echo -e "${YELLOW}   重要: 关闭时请使用停止脚本以安全停止录制${NC}"
+fi
+
+echo ""
+echo -e "${YELLOW}按 Ctrl+C 或关闭终端不会停止后台服务${NC}"
+echo -e "${YELLOW}如需停止，请执行上述停止命令${NC}"
+echo ""

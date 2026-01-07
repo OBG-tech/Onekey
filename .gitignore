@@ -28,6 +28,7 @@ archives/
 # 预�??练模型文件（通常很大，不应提交到Git�?
 pretrained_models/
 pretrained_models/FireRedASR-AED-L/model.pth.tar
+FireRedASR/
 *.pth
 *.pth.tar
 *.pt

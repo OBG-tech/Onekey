@@ -83,6 +83,9 @@ CORE_FILES=(
     "LAUNCH_GUI.py"
     "_repair_moments.py"
     "update_old_cards.py"
+    "check_macos_env.sh"
+    "clear_session_macos.sh"
+    "detect_cameras_macos.py"
 )
 
 for file in "${CORE_FILES[@]}"; do
@@ -163,6 +166,17 @@ for file in "${DOC_FILES[@]}"; do
         cp "$file" "$PACKAGE_DIR/"
     fi
 done
+
+# 创建 macOS 移植指南 (如果在当前目录)
+if [ -f "macOS_M2_移植指南.md" ]; then
+    cp "macOS_M2_移植指南.md" "$PACKAGE_DIR/"
+    echo "   ✓ macOS_M2_移植指南.md"
+fi
+
+if [ -f "macOS_快速参考.md" ]; then
+    cp "macOS_快速参考.md" "$PACKAGE_DIR/"
+    echo "   ✓ macOS_快速参考.md"
+fi
 
 # ============================================================
 # 第十一步：创建macOS专用脚本

@@ -508,15 +508,19 @@ class KeyMomentsManager:
 
     @staticmethod
     def _extract_tagline(text: str) -> tuple[str, str]:
-        """从模型输出中抽取短标签（用于卡片/贴纸）和正文。"""
+        """从模型输出中抽取短标签（用于卡片/贴纸）和正文。支持中英文格式。"""
         if not text:
             return "", ""
         lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
         tagline = ""
         body_lines = []
         for ln in lines:
-            if ln.startswith("标签：") or ln.startswith("标签:"):
-                tagline = ln.split("：", 1)[1].strip() if "：" in ln else ln.split(":", 1)[1].strip()
+            # 支持中文和英文标签格式
+            if ln.startswith("标签：") or ln.startswith("标签:") or ln.lower().startswith("label:"):
+                if "：" in ln:
+                    tagline = ln.split("：", 1)[1].strip()
+                else:
+                    tagline = ln.split(":", 1)[1].strip()
                 continue
             body_lines.append(ln)
 
@@ -526,8 +530,8 @@ class KeyMomentsManager:
             tagline = first
 
         tagline = tagline.replace("\"", "").strip()
-        if len(tagline) > 14:
-            tagline = tagline[:14]
+        if len(tagline) > 50:  # 英文标签可能更长，增大限制
+            tagline = tagline[:50]
         body = "\n".join(body_lines).strip()
         if not body:
             body = text.strip()
@@ -535,14 +539,15 @@ class KeyMomentsManager:
 
     @staticmethod
     def _extract_detail_description(body: str) -> str:
-        """从正文中抽取"详细描述"段落（用于卡片展示，更信息密集）。"""
+        """从正文中抽取"详细描述"段落（用于卡片展示，更信息密集）。支持中英文格式。"""
         if not body:
             return ""
         lines = [ln.strip() for ln in body.splitlines()]
-        # 支持"详细描述：/详细描述:"两种分隔
+        # 支持中文和英文格式
         start = None
         for i, ln in enumerate(lines):
-            if ln.startswith("详细描述：") or ln.startswith("详细描述:"):
+            if (ln.startswith("详细描述：") or ln.startswith("详细描述:") or 
+                ln.lower().startswith("detailed description:")):
                 start = i
                 break
         if start is None:
@@ -562,17 +567,24 @@ class KeyMomentsManager:
         for ln in lines[start + 1 :]:
             if not ln:
                 continue
+            # 支持中文和英文停止标记
             if any(
-                ln.startswith(p)
+                ln.startswith(p) or ln.lower().startswith(p.lower())
                 for p in (
                     "上下文定位：",
                     "上下文定位:",
+                    "Context Positioning:",
                     "证据摘录：",
                     "证据摘录:",
+                    "Evidence Excerpt:",
                     "标签：",
                     "标签:",
+                    "Label:",
                     "卡片摘要：",
                     "卡片摘要:",
+                    "Card Summary:",
+                    "分析框架标签",
+                    "Analysis Framework Label:",
                 )
             ):
                 break
@@ -581,26 +593,35 @@ class KeyMomentsManager:
     
     @staticmethod
     def _extract_card_summary(body: str) -> str:
-        """从正文中抽取\"卡片摘要\"（20-25字的简短版本）。"""
+        """从正文中抽取\"卡片摘要\"（20-30 words的简短版本）。支持中英文格式。"""
         if not body:
             return ""
         lines = [ln.strip() for ln in body.splitlines()]
         for ln in lines:
-            if ln.startswith("卡片摘要：") or ln.startswith("卡片摘要:"):
-                txt = ln.split("：", 1)[-1].split(":", 1)[-1].strip()
+            # 支持中文和英文格式
+            if ln.startswith("卡片摘要：") or ln.startswith("卡片摘要:") or ln.lower().startswith("card summary:"):
+                if "：" in ln:
+                    txt = ln.split("：", 1)[-1].strip()
+                else:
+                    txt = ln.split(":", 1)[-1].strip()
                 return txt
         return ""
     
     @staticmethod
     def _extract_framework_tags(body: str) -> str:
-        """从正文中抽取'分析框架标签'段落"""
+        """从正文中抽取'分析框架标签'段落。支持中英文格式。"""
         if not body:
             return ""
         lines = [ln.strip() for ln in body.splitlines()]
         for i, ln in enumerate(lines):
-            if ln.startswith("分析框架标签：") or ln.startswith("分析框架标签:") or ln.startswith("框架标签："):
+            # 支持中文和英文格式
+            if (ln.startswith("分析框架标签：") or ln.startswith("分析框架标签:") or 
+                ln.startswith("框架标签：") or ln.lower().startswith("analysis framework label:")):
                 # 提取内容（去掉前缀）
-                content = ln.split("：", 1)[-1].split(":", 1)[-1].strip()
+                if "：" in ln:
+                    content = ln.split("：", 1)[-1].strip()
+                else:
+                    content = ln.split(":", 1)[-1].strip()
                 return content
         return ""
 
@@ -2280,7 +2301,7 @@ class KeyMomentsManager:
             
                 if result.returncode != 0 or not audio_for_asr_path.exists():
                     print(f"   ⚠️ 音频提取失败，跳过语音转文字")
-                    self._mark_moment_no_audio(moment_id, "视频片段无音频轨/音频提取失败")
+                    self._mark_moment_no_audio(moment_id, "Video segment has no audio track/audio extraction failed")
                     return
             
                 # 2. 调用ASR进行语音转文字
@@ -2310,7 +2331,7 @@ class KeyMomentsManager:
 
             if self._transcript_is_missing(transcript):
                 _ai_step(9, total_steps, "跳过AI分析(ASR为空/无有效语音)")
-                self._mark_moment_no_audio(moment_id, "ASR为空/无有效语音")
+                self._mark_moment_no_audio(moment_id, "ASR is empty/no valid speech")
                 return
             
             # 4. 进行多模态AI分析 (视频+语音)
@@ -2598,38 +2619,39 @@ class KeyMomentsManager:
             if len(context_excerpt) > 3500:
                 context_excerpt = "[...context truncated...]\n" + context_excerpt[-3500:]
 
-            prompt = f"""你是一面"智能镜子"，忠实记录创客马拉松/Hackathon现场发生的事情。
+            prompt = f"""You are an "intelligent mirror" that faithfully records what happens at a Maker Marathon/Hackathon event.
 
-场景说明：这是创客马拉松 / Hackathon 现场（做原型、写代码、调试、讨论方案）。
+Scene description: This is a Maker Marathon / Hackathon venue (making prototypes, writing code, debugging, discussing solutions).
 
-核心原则 - 镜子观察法：
-1) **忠实反映**：像镜子一样客观描述画面中看到的内容和ASR听到的对话，不加主观评价。
-2) **具体可见**：描述具体的动作、对话、表情、物品，而非抽象概念（如"深度讨论"→"两人指着屏幕交谈"）。
-3) **有什么说什么**：看到多少人写多少人、听到什么对话引用原文、看到什么动作描述动作。
-4) **全文定位**：⚠️ 必须基于【历史上下文】的完整转写理解当前时刻在整个活动流程中的位置，说明前面发生了什么、现在在做什么、这个时刻的意义。
-5) **无法确定就明说**：如果画面模糊、ASR为空、无法判断，直接写"画面未显示明确活动"或"无语音"。
-6) ⚠️ 如果【本片段ASR】为"(无语音)"且画面无明显活动，写"画面无明显活动"即可，不要猜测编造。
+Core principles - Mirror Observation Method:
+1) **Faithful reflection**: Objectively describe what you see in the frame and what you hear from ASR, without subjective evaluation.
+2) **Concrete and visible**: Describe specific actions, dialogues, expressions, objects, not abstract concepts (e.g., "deep discussion" → "two people pointing at screen and talking").
+3) **Report what you see**: Write how many people you see, quote the dialogue you hear, describe the actions you observe.
+4) **Full context positioning**: ⚠️ You MUST understand the current moment's position in the overall activity flow based on the complete transcript in [Historical Context], explaining what happened before, what is happening now, and the significance of this moment.
+5) **Admit uncertainty**: If the image is blurry, ASR is empty, or you cannot determine, write "The frame does not show clear activity" or "No voice content".
+6) ⚠️ If [This Segment ASR] is "(no voice)" AND the frame shows no obvious activity, write "No obvious activity in frame", do NOT fabricate content.
 
-【按键原因/备注】{user_note or "(无)"}
+[Button Reason/Note] {user_note or "(none)"}
 
-【历史上下文(可能截断)】
-{context_excerpt or "(无)"}
+[Historical Context (may be truncated)]
+{context_excerpt or "(none)"}
 
-【本片段ASR（可能有噪声）】
-{transcript_clean or "(无语音)"}
+[This Segment ASR (may have noise)]
+{transcript_clean or "(no voice)"}
 
-⚠️ **优先级原则**：
-- 语音内容 > 画面内容（语音才是核心活动记录）
-- 如果ASR有内容，必须以语音为主线描述，画面作为补充
-- 如果ASR为空，才纯粹描述画面
+⚠️ **Priority Principle**:
+- Voice content > Frame content (voice is the core activity record)
+- If ASR has content, you MUST describe with voice as the main line, frame as supplement
+- Only describe frame purely if ASR is empty
 
-输出格式严格如下：
-标签：<10~14字，必须包含：人数+具体动作/事件（优先基于语音内容）+关键对象；可带0-1个相关表情符号>
-详细描述：<2~3句，**优先描述语音内容**：①如果有ASR，先引用对话原文（中文或英文）②再补充画面：人数、布局、动作 ③可见物品；使用短句；总字数≤120；禁用"热烈""深度""火花"等抽象词>
-分析框架标签：<如果对话/行为符合协作学习编码框架，标注对应标签，如"[R2]论证推理"、"Eng-Flow"、"Soc-Help互助"；若无明显框架行为，写"无框架标签">
-上下文定位：<1~2句，**基于【历史上下文】的完整转写**，说明：①这个时刻之前发生了什么 ②当前在整个活动流程的哪个阶段 ③这个时刻的作用/意义；若历史上下文为空则写"无历史上下文">
-证据摘录：<1~3条，原样引用ASR或历史上下文，保留时间戳；若无则写"无">
+Output format strictly as follows:
+Label: <10-14 words, must include: number of people + specific action/event (prioritize based on voice content) + key object; may include 0-1 related emoji>
+Detailed Description: <2-3 sentences, **prioritize describing voice content**: ①If there is ASR, first quote the dialogue verbatim (Chinese or English) ②Then supplement with frame: number of people, layout, actions ③Visible objects; use short sentences; total ≤120 words; prohibited words: "lively", "deep", "sparks" and other abstract terms>
+Analysis Framework Label: <If the dialogue/behavior matches the collaborative learning coding framework, annotate the corresponding label, such as "[R2] Argumentation", "Eng-Flow", "Soc-Help Mutual Aid"; if no obvious framework behavior, write "No framework label">
+Context Positioning: <1-2 sentences, **based on the complete transcript in [Historical Context]**, explain: ①What happened before this moment ②Current stage in the overall activity flow ③The role/significance of this moment; write "No historical context" if history is empty>
+Evidence Excerpt: <1-3 items, quote ASR or historical context verbatim, preserve timestamps; write "None" if unavailable>
 """
+
 
             ai_analysis = self._run_vision_llm(
                 image_base64=image_base64,
@@ -2643,44 +2665,44 @@ class KeyMomentsManager:
             use_text_postprocess = os.environ.get("KEY_MOMENT_TEXT_POSTPROCESS", "1").strip().lower() in {"1", "true", "yes"}
             final_text = ai_analysis
             if use_text_postprocess:
-                refine_prompt = f"""你是一面智能镜子，客观整理视觉模型的输出。
+                refine_prompt = f"""You are an intelligent mirror, objectively organizing the visual model's output.
 
-场景说明：这是创客马拉松 / Hackathon 现场（做原型、写代码、调试、讨论方案）。
+Scene description: This is a Maker Marathon / Hackathon venue (making prototypes, writing code, debugging, discussing solutions).
 
-你将收到三份输入：
-1) 视觉模型对画面的解读（可能不完整/有误）
-2) 历史上下文（带时间戳，可能被截断）
-3) 本片段 ASR 文本（可能有噪声）
+You will receive three inputs:
+1) Visual model's interpretation of the frame (may be incomplete/inaccurate)
+2) Historical context (with timestamps, may be truncated)
+3) This segment's ASR text (may have noise)
 
-硬性要求：
-- 只能使用【历史上下文】与【ASR】里的文字作为“证据摘录”；摘录必须尽量原样、带时间戳。
-- 对画面只能描述你“从视觉解读里能确定的部分”；不确定就写“无法确定”。
-- 输出中文，客观描述风格：忠实反映画面和对话，不添加主观评价。
-- 描述具体可见内容，不使用模糊抽象词汇。
+Hard requirements:
+- You can ONLY use text from [Historical Context] and [ASR] as "Evidence Excerpt"; excerpts must be verbatim with timestamps.
+- For the frame, only describe what you "can confirm from the visual interpretation"; if uncertain, write "Cannot determine".
+- Output in English, objective description style: faithfully reflect the frame and dialogue, do not add subjective evaluation.
+- Describe specific visible content, do not use vague abstract vocabulary.
 
-【按键原因/备注】{user_note or "(无)"}
+[Button Reason/Note] {user_note or "(none)"}
 
-【视觉解读(来自模型，可能有误)】
-{(ai_analysis or "").strip() or "(无)"}
+[Visual Interpretation (from model, may have errors)]
+{(ai_analysis or "").strip() or "(none)"}
 
-【历史上下文(可能截断)】
-{context_excerpt or "(无)"}
+[Historical Context (may be truncated)]
+{context_excerpt or "(none)"}
 
-【本片段ASR（可能有噪声）】
-{transcript_clean or "(无语音/未识别)"}
+[This Segment ASR (may have noise)]
+{transcript_clean or "(no voice/not recognized)"}
 
-⚠️ **优先级原则**：
-- 语音内容 > 画面内容（语音才是核心活动记录）
-- 如果ASR有内容，必须以语音为主线描述
-- 如果ASR为空，才描述画面
+⚠️ **Priority Principle**:
+- Voice content > Frame content (voice is the core activity record)
+- If ASR has content, you MUST describe with voice as the main line
+- Only describe frame if ASR is empty
 
-输出格式严格如下：
-标签：<10~14字，必须基于语音内容或画面动作；可带0-1个表情符号>
-卡片摘要：<**必须30-35字**，生动有趣，像新闻标题一样吸引眼球！必须带1-2个表情符号🎯。禁止以"团队成员"、"参与者"、"演讲者"开头❌；用动词或场景开头✅。好例子："机器狗终于跑起来了！凌晨四点半的突破时刻🤖⚡️"（30字）、"从虚拟游戏到现实创作，这波认知跃迁太上头了🧠🎮"（29字）、"3D打印让创意落地变简单，创客门槛直线下降🛠️💡"（31字）；坏例子："团队成员讨论技术问题"（太无聊❌）、"参与者分享经历"（太抽象❌）>
-详细描述：<**必须3~5句完整句子**，总字数**必须达到150~250字**。优先详细引用ASR对话（带引号），然后描述画面：具体人数、位置、动作、表情、物品。使用连贯叙述风格，像在给盲人讲述场景。禁用抽象词汇>
-分析框架标签：<如果对话/行为符合协作学习编码框架（如[R2]论证、Eng-Flow、Soc-Help等），标注对应标签；若无明显框架行为，写"无框架标签">
-上下文定位：<1~2句，**基于【历史上下文】的完整转写**，说明：①这个时刻之前发生了什么 ②当前在整个活动流程的哪个阶段 ③这个时刻的作用/意义；若历史上下文为空则写"无历史上下文">
-证据摘录：<1~3条，原样引用ASR或历史上下文，保留时间戳；若无则写"无">
+Output format strictly as follows:
+Label: <10-14 words, must be based on voice content or frame action; may include 0-1 emoji>
+Card Summary: <**MUST be 20-30 words**, vivid and interesting, eye-catching like a news headline! MUST include 1-2 emojis 🎯. DO NOT start with "Team members", "Participants", "Speaker" ❌; Start with verbs or scenes ✅. Good examples: "The robot dog finally runs! Breakthrough moment at 4:30am 🤖⚡️", "From virtual games to real creation, this cognitive leap is epic 🧠🎮", "3D printing makes creativity tangible, maker barrier drops dramatically 🛠️💡"; Bad examples: "Team members discuss technical issues" (too boring ❌), "Participants share experiences" (too abstract ❌)>
+Detailed Description: <**MUST be 3-5 complete sentences**, total word count **MUST reach 100-150 words**. Prioritize detailed quotation of ASR dialogue (with quotes), then describe frame: specific number of people, positions, actions, expressions, objects. Use coherent narrative style, as if describing the scene to a blind person. Prohibited: abstract vocabulary>
+Analysis Framework Label: <If the dialogue/behavior matches the collaborative learning coding framework (such as [R2] Argumentation, Eng-Flow, Soc-Help, etc.), annotate the corresponding label; if no obvious framework behavior, write "No framework label">
+Context Positioning: <1-2 sentences, **based on the complete transcript in [Historical Context]**, explain: ①What happened before this moment ②Current stage in the overall activity flow ③The role/significance of this moment; write "No historical context" if history is empty>
+Evidence Excerpt: <1-3 items, quote ASR or historical context verbatim, preserve timestamps; write "None" if unavailable>
 """
                 try:
                     final_text = self._run_text_llm(
@@ -2778,14 +2800,14 @@ class KeyMomentsManager:
         return len(meaningful) < 2
 
     def _mark_moment_no_audio(self, moment_id: str, reason: str) -> None:
-        """缺少有效音频/语音证据时，明确回写为“不可可靠总结”，避免 LLM 编造。"""
+        """When there is no valid audio/voice evidence, explicitly write "unreliable summary" to prevent LLM fabrication."""
         with self._moments_lock:
             for m in self.moments:
                 if m.id != moment_id:
                     continue
-                m.ai_tagline = "🎧 无音频"
-                m.ai_description = f"无音频/无语音内容，无法生成可靠摘要（{reason}）"
-                m.analysis = f"[无音频] {reason}"
+                m.ai_tagline = "🎧 No Audio"
+                m.ai_description = f"No audio/voice content, unable to generate reliable summary ({reason})"
+                m.analysis = f"[No Audio] {reason}"
                 try:
                     m.ai_importance = min(float(getattr(m, "ai_importance", 0.0) or 0.0), 0.15)
                 except Exception:

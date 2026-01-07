@@ -1,0 +1,70 @@
+/*
+多摄像头系统前端CSS调整
+支持4K拼接画面显示 (3840x2160)
+*/
+
+/* 视频容器 - 增大以适应4K拼接画面 */
+#video-docked-panel {
+    min-height: 400px !important;  /* 从200px增加到400px */
+    max-height: 800px !important;  /* 添加最大高度限制 */
+}
+
+#video-docked-slot {
+    height: auto !important;
+    max-height: 70vh !important;  /* 视窗高度的70% */
+    min-height: 400px !important;
+}
+
+/* 视频图片元素 - 适配大分辨率 */
+#video-docked-slot img {
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    object-fit: contain !important;
+}
+
+/* People Grid - 增大空间以匹配视频高度 */
+.people-grid {
+    max-height: 700px !important;  /* 从240px增加到700px */
+}
+
+/* Stats面板 - 保持紧凑但可见 */
+.stats-panel {
+    max-height: none !important;
+}
+
+/* Key Moments面板 - 增加高度 */
+#keymoments-section {
+    min-height: 500px !important;
+}
+
+/* 响应式布局调整 */
+@media (min-width: 1920px) {
+    /* 大屏幕优化 */
+    #video-docked-slot {
+        max-height: 80vh !important;
+    }
+    
+    .people-grid {
+        max-height: 800px !important;
+    }
+}
+
+@media (max-width: 1600px) {
+    /* 中等屏幕 */
+    #video-docked-slot {
+        max-height: 60vh !important;
+    }
+}
+
+@media (max-width: 1280px) {
+    /* 小屏幕 */
+    #video-docked-slot {
+        max-height: 50vh !important;
+        min-height: 300px !important;
+    }
+    
+    .people-grid {
+        max-height: 400px !important;
+    }
+}
