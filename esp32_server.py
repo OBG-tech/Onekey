@@ -16,36 +16,30 @@ TCP_KEEPCNT = getattr(socket, "TCP_KEEPCNT", 6)
 TCP_USER_TIMEOUT = getattr(socket, "TCP_USER_TIMEOUT", 18)  # Linux 常见；不支持则跳过
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "button_log.txt")
-API_BASE_URL = "http://localhost:8082"
-
-
 def trigger_key_moment(button_number):
-    """触发创建关键时刻（带重试机制）"""
-    max_retries = 3
-    retry_delay = 0.5
-
-    for attempt in range(max_retries):
+    """触发创建关键时刻（带重试机制，支持多端口）"""
+    target_ports = [8082, 8080]
+    
+    for port in target_ports:
+        API_BASE_URL = f"http://localhost:{port}"
         try:
             url = f"{API_BASE_URL}/api/mark_moment"
             payload = {"note": f"button {button_number}"}
-            response = requests.post(url, json=payload, timeout=10)
+            # lower timeout to fail fast on wrong port
+            response = requests.post(url, json=payload, timeout=2)
 
             if response.status_code == 200:
-                print(f"Moment created: button {button_number} (try {attempt + 1}/{max_retries})")
+                print(f"✅ Moment created on {API_BASE_URL}: button {button_number}")
                 return True
             else:
-                print(f"Moment create failed: {response.status_code} (try {attempt + 1}/{max_retries})")
+                print(f"❌ Moment create failed on {API_BASE_URL}: {response.status_code}")
 
-        except requests.exceptions.Timeout:
-            if attempt == max_retries - 1:
-                print(f"API timeout, button {button_number} recorded but moment may be delayed")
+        except requests.exceptions.ConnectionError:
+            pass # Try next port
         except Exception as e:
-            if attempt == max_retries - 1:
-                print(f"API call failed: {e}")
+            print(f"⚠️ API call to {port} failed: {e}")
 
-        if attempt < max_retries - 1:
-            time.sleep(retry_delay)
-
+    print(f"❌ Failed to trigger moment on ports {target_ports}. Is integrated_system.py running?")
     return False
 
 

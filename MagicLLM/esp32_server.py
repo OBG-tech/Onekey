@@ -2,6 +2,9 @@ import socket
 import select
 import time
 import os
+import json
+import urllib.request
+import urllib.error
 from datetime import datetime
 
 HOST = ''        
@@ -15,6 +18,33 @@ TCP_KEEPCNT = 6    # socket.TCP_KEEPCNT
 # 日志文件路径
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "button_log.txt")
 
+def trigger_key_moment(button_number):
+    """通过 HTTP API 触发关键时刻"""
+    ports = [8082, 8080]  # Try 8082 (multicam) first, then 8080 (default)
+    data = {
+        "note": f"Button {button_number} Pressed"
+    }
+    json_data = json.dumps(data).encode('utf-8')
+    
+    for port in ports:
+        url = f"http://localhost:{port}/api/mark_moment"
+        try:
+            req = urllib.request.Request(
+                url, 
+                data=json_data, 
+                headers={'Content-Type': 'application/json'}
+            )
+            with urllib.request.urlopen(req, timeout=1.0) as response:
+                if response.status == 200:
+                    print(f"✅ 已触发关键时刻 ({url}): 按钮 {button_number}")
+                    return  # Success
+        except urllib.error.URLError as e:
+            print(f"   [Port {port}] Connection failed: {e.reason}")
+        except Exception as e:
+            print(f"   [Port {port}] Error: {e}")
+
+    print(f"⚠️ 触发关键时刻失败 (尝试端口 {ports}): 请确保 integrated_system.py 正运行在 8080 或 8082 端口")
+
 def save_button_press(button_number):
     """保存按钮消息和时间到文件"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -22,6 +52,9 @@ def save_button_press(button_number):
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(log_line)
     print(f"已记录: {log_line.strip()}")
+    
+    # 触发关键时刻
+    trigger_key_moment(button_number)
 
 def start_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
