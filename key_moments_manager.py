@@ -2068,10 +2068,10 @@ class KeyMomentsManager:
                     ai_result=result
                 )
             else:
-                print(f"🤖 AI 分析 (帧 {frame_number}): 非关键时刻 (重要性: {result.get('importance', 0):.2f})")
+                print(f"🤖 AI Analysis (Frame {frame_number}): Non-key moment (Importance: {result.get('importance', 0):.2f})")
                 
         except Exception as e:
-            print(f"⚠️ AI 分析失败: {e}")
+            print(f"⚠️ AI Analysis failed: {e}")
     
     def _record_ai_moment(self, frame, frame_number: int,
                           person_count: int, track_ids: List[int],
@@ -2755,18 +2755,18 @@ Evidence Excerpt: <1-3 items, quote ASR or historical context verbatim, preserve
                         f"vision={self.vision_model};text={self.text_model}"
                         if use_text_postprocess else self.vision_model
                     )
-                    print(f"✅ AI 分析完成: {moment_id}")
+                    print(f"✅ AI Analysis completed: {moment_id}")
                     if (moment.ai_tagline or "").strip():
-                        print(f"   🏷️ 标签: {moment.ai_tagline}")
+                        print(f"   🏷️ Tag: {moment.ai_tagline}")
                     if framework_tags:
-                        print(f"   🔖 框架标签: {framework_tags}")
+                        print(f"   🔖 Framework tags: {framework_tags}")
                     break
             
             # 保存更新
             self._save_moments()
             
         except Exception as e:
-            print(f"⚠️ AI 分析失败: {e}")
+            print(f"⚠️ AI Analysis failed: {e}")
             import traceback
             traceback.print_exc()
 

@@ -1,179 +1,134 @@
 #!/bin/bash
 # ============================================================
-# 🐧 Ubuntu 24.04 LTS 一键安装脚本
+# 🐧 Ubuntu 22.04/24.04 LTS 一键安装脚本 (完整版)
 # ============================================================
-# 用途: 自动安装智能视频分析系统所需的所有依赖
+# 用途: 自动安装智能视频分析系统所需的所有依赖 (系统 + Python)
 # 使用: chmod +x install_ubuntu.sh && ./install_ubuntu.sh
 # ============================================================
 
 set -e  # 遇到错误立即退出
 
-echo "🎬 智能视频分析整合系统 - Ubuntu 24.04 安装脚本"
-echo "============================================================"
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║   �� 智能视频分析整合系统 - 依赖安装脚本              ║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
 # 检测是否为 root 用户
 if [ "$EUID" -eq 0 ]; then 
-    echo "⚠️  请不要使用 sudo 运行此脚本"
-    echo "   脚本会在需要时自动请求 sudo 权限"
+    echo -e "${RED}⚠️  请不要使用 sudo 运行此脚本${NC}"
+    echo -e "${YELLOW}   脚本会在需要时自动请求 sudo 权限${NC}"
     exit 1
 fi
 
-# 检测 Ubuntu 版本
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    if [[ "$ID" != "ubuntu" ]]; then
-        echo "⚠️  警告: 此脚本为 Ubuntu 24.04 优化，您的系统是: $PRETTY_NAME"
-        read -p "   是否继续? (y/n) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
-    fi
-fi
-
-echo "📦 步骤 1/4: 更新系统包索引..."
+# 1. 系统更新与依赖安装
+echo -e "${BLUE}📦 [1/5] 安装系统依赖...${NC}"
 echo "------------------------------------------------------------"
+
+echo -e "${YELLOW}🔄 更新 apt 源...${NC}"
 sudo apt update
 
-echo ""
-echo "📦 步骤 2/4: 安装系统依赖..."
-echo "------------------------------------------------------------"
-
-# Python 开发环境
-echo "  ⏳ 安装 Python 开发工具..."
+echo -e "${YELLOW}📦 安装核心库...${NC}"
+# Python基础
 sudo apt install -y python3-pip python3-venv python3-dev
 
-# 音频依赖
-echo "  🎤 安装音频处理库..."
+# 音频 (PortAudio) - 必需 for PyAudio
 sudo apt install -y portaudio19-dev python3-pyaudio
 
-# OpenCV 依赖
-echo "  📷 安装图像处理库..."
-sudo apt install -y libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev
+# 视频 (OpenCV, FFmpeg)
+sudo apt install -y libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev ffmpeg
 
-# 视频处理工具
-echo "  🎬 安装 FFmpeg..."
-sudo apt install -y ffmpeg
-
-# 摄像头支持
-echo "  📹 配置摄像头权限..."
+# 摄像头 (V4L2)
 sudo apt install -y v4l-utils
+
+# 添加用户到 video/audio 组
+echo -e "${YELLOW}👤 配置用户权限...${NC}"
 sudo usermod -a -G video $USER
+sudo usermod -a -G audio $USER
 
-echo ""
-echo "✅ 系统依赖安装完成！"
-echo ""
-
-# 选择安装方式
-echo "📦 步骤 3/4: 选择 Python 包安装方式"
-echo "------------------------------------------------------------"
-echo "请选择安装方式:"
-echo "  1) 基础安装 (仅视频分析，不含 AI)"
-echo "  2) 完整安装 - Claude Haiku 4.5 (推荐)"
-echo "  3) 完整安装 - Qwen 通义千问"
-echo "  4) 完整安装 - 同时支持 Claude 和 Qwen"
-echo "  5) 手动安装 (跳过此步骤)"
-echo ""
-read -p "请输入选项 (1-5): " choice
-
-# 检查是否在虚拟环境中
-if [[ -z "$VIRTUAL_ENV" ]]; then
-    echo ""
-    echo "⚠️  您不在虚拟环境中"
-    echo "   建议创建虚拟环境以避免污染系统 Python"
-    read -p "   是否创建虚拟环境? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "  📦 创建虚拟环境 .venv ..."
-        python3 -m venv .venv
-        echo "  ✅ 虚拟环境已创建"
-        echo "  💡 请运行: source .venv/bin/activate"
-        echo "     然后重新执行此脚本"
-        exit 0
-    fi
-fi
-
-echo ""
-echo "  ⏳ 升级 pip..."
-pip install --upgrade pip
-
-case $choice in
-    1)
-        echo "  📦 基础安装..."
-        pip install opencv-python numpy ultralytics
-        ;;
-    2)
-        echo "  📦 完整安装 (Claude Haiku 4.5)..."
-        pip install opencv-python numpy ultralytics anthropic PyAudio
-        ;;
-    3)
-        echo "  📦 完整安装 (Qwen)..."
-        pip install opencv-python numpy ultralytics openai dashscope PyAudio
-        ;;
-    4)
-        echo "  📦 完整安装 (Claude + Qwen)..."
-        pip install opencv-python numpy ultralytics anthropic openai dashscope PyAudio
-        ;;
-    5)
-        echo "  ⏭️  跳过 Python 包安装"
-        ;;
-    *)
-        echo "  ❌ 无效选项，跳过安装"
-        ;;
-esac
-
-echo ""
-echo "📦 步骤 4/4: 验证安装"
+# 2. 虚拟环境配置
+echo -e "\n${BLUE}🐍 [2/5] 配置 Python 虚拟环境...${NC}"
 echo "------------------------------------------------------------"
 
-# 验证核心包
-echo "  🔍 检查核心依赖..."
-python3 -c "import cv2; print(f'  ✅ OpenCV: {cv2.__version__}')" 2>/dev/null || echo "  ❌ OpenCV 未安装"
-python3 -c "import numpy; print(f'  ✅ NumPy: {numpy.__version__}')" 2>/dev/null || echo "  ❌ NumPy 未安装"
-python3 -c "from ultralytics import YOLO; print('  ✅ YOLO: 已安装')" 2>/dev/null || echo "  ❌ YOLO 未安装"
-
-# 验证可选包
-if python3 -c "import anthropic" 2>/dev/null; then
-    echo "  ✅ Anthropic (Claude): 已安装"
+if [ ! -d ".venv" ]; then
+    echo -e "${YELLOW}📂 创建 .venv...${NC}"
+    python3 -m venv .venv
+else
+    echo -e "${GREEN}✅ .venv 已存在${NC}"
 fi
 
-if python3 -c "import openai" 2>/dev/null; then
-    echo "  ✅ OpenAI (Qwen): 已安装"
+# 激活虚拟环境
+echo -e "${YELLOW}🔌 激活虚拟环境...${NC}"
+source .venv/bin/activate
+
+# 升级 pip
+echo -e "${YELLOW}⬆️  升级 pip...${NC}"
+python3 -m pip install --upgrade pip
+
+# 3. 安装 Python 依赖
+echo -e "\n${BLUE}📥 [3/5] 安装 Python 依赖包...${NC}"
+echo "------------------------------------------------------------"
+
+# 安装基础依赖
+echo -e "${YELLOW}📦 安装 requirements.txt...${NC}"
+pip install -r requirements.txt
+
+# 安装 FireRedASR 依赖 (如果存在)
+if [ -d "FireRedASR" ] && [ -f "FireRedASR/requirements.txt" ]; then
+    echo -e "${YELLOW}🔥 安装 FireRedASR 依赖...${NC}"
+    pip install -r FireRedASR/requirements.txt
 fi
 
-if python3 -c "import pyaudio" 2>/dev/null; then
-    echo "  ✅ PyAudio: 已安装"
+# 4. 可选组件安装
+echo -e "\n${BLUE}🧩 [4/5] 检查可选组件...${NC}"
+echo "------------------------------------------------------------"
+
+# 人脸识别 Check
+read -p "👤 是否安装高精度人脸识别 (InsightFace)? [y/N] " -n 1 -r
+echo ""
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}📦 安装 InsightFace & ONNXRuntime...${NC}"
+    pip install insightface onnxruntime-gpu 2>/dev/null || pip install insightface onnxruntime
 fi
 
-if python3 -c "import insightface" 2>/dev/null; then
-    echo "  ✅ InsightFace: 已安装"
-fi
+# 5. 验证安装
+echo -e "\n${BLUE}✅ [5/5] 验证安装结果...${NC}"
+echo "------------------------------------------------------------"
+
+function check_pkg() {
+    python3 -c "import $1; print(f'  ✅ $1: {getattr($1, \"__version__\", \"Installed\")}')" 2>/dev/null || echo -e "  ${RED}❌ $1 未安装${NC}"
+}
+
+echo "核心库:"
+check_pkg cv2
+check_pkg numpy
+check_pkg ultralytics
+check_pkg pyaudio
+
+echo -e "\nAI 接口:"
+check_pkg anthropic
+check_pkg openai
+check_pkg dashscope
+
+echo -e "\nFireRedASR 依赖:"
+check_pkg torch
+check_pkg kaldiio
 
 echo ""
-echo "============================================================"
-echo "✅ 安装完成！"
-echo "============================================================"
+echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║   🎉 安装全部完成！                                   ║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo "📋 后续步骤:"
+echo -e "${YELLOW}🚨 重要提示:${NC}"
+echo "1. 如果这是首次安装，请${RED}注销并重新登录${NC}以使摄像头权限生效。"
+echo "   命令: logout"
 echo ""
-echo "1. 重新登录以应用用户组更改 (摄像头权限)"
-echo "   logout && login"
+echo "2. 启动方式:"
+echo "   ./start_multicam.sh -i"
 echo ""
-echo "2. 配置 API 密钥 (如需 AI 功能):"
-echo "   export LLM_PROVIDER=\"claude\"  # 或 \"qwen\""
-echo "   export ANTHROPIC_API_KEY=\"sk-ant-your-key\""
-echo ""
-echo "3. 测试摄像头:"
-echo "   python3 integrated_system.py --camera 0"
-echo ""
-echo "4. 启动完整系统:"
-echo "   python3 LAUNCH_GUI.py"
-echo ""
-echo "💡 提示:"
-echo "   - 如遇到摄像头权限问题，请重新登录系统"
-echo "   - 如需人脸识别，运行: pip install insightface onnxruntime"
-echo "   - 查看日志: tail -f integrated_data/logs/*.log"
-echo ""
-echo "📚 文档: README.md | 使用说明.md"
-echo "============================================================"

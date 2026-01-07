@@ -2,6 +2,9 @@
 # 多摄像头录制系统启动脚本
 # 独立运行，不依赖OBS
 
+# 切换到脚本所在目录
+cd "$(dirname "$0")"
+
 # 颜色定义
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -80,7 +83,7 @@ if [ "$1" == "--interactive" ] || [ "$1" == "-i" ]; then
 fi
 
 # 构建命令
-CMD="python multi_camera_recording.py --cameras $CAMERAS --layout $LAYOUT --output-dir $OUTPUT_DIR --fps $FPS"
+CMD="python3 multi_camera_recording.py --cameras $CAMERAS --layout $LAYOUT --output-dir $OUTPUT_DIR --fps $FPS"
 
 if [ "$SHOW_PREVIEW" != "true" ]; then
     CMD="$CMD --no-preview"

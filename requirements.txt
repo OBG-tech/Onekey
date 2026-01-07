@@ -11,7 +11,7 @@
 opencv-python>=4.8.0          # 视频处理、图像操作
 numpy>=1.24.0                 # 数值计算
 ultralytics>=8.0.0            # YOLOv11 人物检测
-lap>=0.5.12                   # Ultralytics 跟踪器线性分配依赖
+lapx>=0.5.5                   # Ultralytics 跟踪器线性分配依赖 (替换 lap 以支持 Python 3.10+)
 
 # ============================================================
 # AI 分析功能 (可选 - 二选一或两者都装)
@@ -55,44 +55,44 @@ sentencepiece>=0.1.99         # FireRedASR AED tokenizer 依赖
 # 
 # 步骤 1: 安装系统依赖
 # ----------------------
-sudo apt update
-sudo apt install -y python3-pip python3-venv python3-dev
-sudo apt install -y portaudio19-dev python3-pyaudio  # PyAudio 依赖
-sudo apt install -y libgl1-mesa-glx libglib2.0-0      # OpenCV 依赖
-sudo apt install -y ffmpeg                             # 视频处理工具
+# sudo apt update
+# sudo apt install -y python3-pip python3-venv python3-dev
+# sudo apt install -y portaudio19-dev python3-pyaudio  # PyAudio 依赖
+# sudo apt install -y libgl1-mesa-glx libglib2.0-0      # OpenCV 依赖
+# sudo apt install -y ffmpeg                             # 视频处理工具
 
 # 可选: 摄像头支持
-sudo apt install -y v4l-utils
-sudo usermod -a -G video $USER  # 添加当前用户到 video 组
+# sudo apt install -y v4l-utils
+# sudo usermod -a -G video $USER  # 添加当前用户到 video 组
 
 # 
 # 步骤 2: 创建虚拟环境 (推荐)
 # ----------------------
-python3 -m venv .venv
-source .venv/bin/activate
+# python3 -m venv .venv
+# source .venv/bin/activate
 
 # 
 # 步骤 3: 安装 Python 包
 # ----------------------
 # 基础安装 (仅视频分析):
-pip install --upgrade pip
-pip install opencv-python numpy ultralytics
+# pip install --upgrade pip
+# pip install opencv-python numpy ultralytics
 
 # 完整安装 (含 Claude AI):
-pip install opencv-python numpy ultralytics anthropic PyAudio
+# pip install opencv-python numpy ultralytics anthropic PyAudio
 
 # 或使用 Qwen:
-pip install opencv-python numpy ultralytics openai dashscope PyAudio
+# pip install opencv-python numpy ultralytics openai dashscope PyAudio
 
 # 添加人脸识别 (可选):
-pip install insightface onnxruntime
+# pip install insightface onnxruntime
 
 # 
 # 步骤 4: 验证安装
 # ----------------------
-python3 -c "import cv2; print(f'OpenCV: {cv2.__version__}')"
-python3 -c "import numpy; print(f'NumPy: {numpy.__version__}')"
-python3 -c "from ultralytics import YOLO; print('YOLO OK')"
+# python3 -c "import cv2; print(f'OpenCV: {cv2.__version__}')"
+# python3 -c "import numpy; print(f'NumPy: {numpy.__version__}')"
+# python3 -c "from ultralytics import YOLO; print('YOLO OK')"
 
 # 
 # ============================================================
@@ -101,14 +101,14 @@ python3 -c "from ultralytics import YOLO; print('YOLO OK')"
 # 
 # macOS 安装:
 # -----------
-brew install portaudio ffmpeg
-pip install -r requirements.txt
+# brew install portaudio ffmpeg
+# pip install -r requirements.txt
 
 # Windows 安装:
 # -------------
-pip install pipwin
-pipwin install pyaudio
-pip install -r requirements.txt
+# pip install pipwin
+# pipwin install pyaudio
+# pip install -r requirements.txt
 # 
 # ============================================================
 # 环境变量配置

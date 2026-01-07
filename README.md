@@ -104,7 +104,7 @@ cd ~/onekey
 
 ```bash
 # 1. 进入项目目录
-cd /Volumes/ZZH_Only/毕设
+cd ~/onekey
 
 # 2. 激活虚拟环境
 source .venv/bin/activate
@@ -322,7 +322,7 @@ export VISION_MODEL="claude-3-5-haiku-20241022"
 
 启动后自动打开：
 
-* 本地: `file:///Volumes/ZZH_Only/毕设/web/integrated.html`
+* 本地: `file:///home/$USER/onekey/web/integrated.html`
 * 服务: `http://localhost:8080`
 
 **功能**:
@@ -474,7 +474,7 @@ python3 integrated_system.py --camera 0 --verbose
 
 #### 联系方式
 
-* 项目位置: `/Volumes/ZZH_Only/毕设`
+* 项目位置: `~/onekey`
 * 启动中心: `web/启动中心.html`
 
 ---

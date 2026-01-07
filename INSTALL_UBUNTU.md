@@ -1,9 +1,9 @@
-# 🐧 Ubuntu 24.04 LTS 安装指南
+# 🐧 Ubuntu 22.04/24.04 LTS 安装指南
 
 ## 📋 系统要求
 
-- **操作系统**: Ubuntu 24.04 LTS (Noble Numbat)
-- **Python**: 3.10+ (Ubuntu 24.04 自带 Python 3.12)
+- **操作系统**: Ubuntu 22.04 LTS 或 24.04 LTS
+- **Python**: 3.10+ (Ubuntu 22.04 自带 Python 3.10)
 - **内存**: 最低 4GB RAM，推荐 8GB+
 - **存储**: 至少 2GB 可用空间
 - **摄像头**: USB 摄像头或内置摄像头（可选）
@@ -24,6 +24,9 @@ chmod +x install_ubuntu.sh
 
 # 3. 重新登录以应用摄像头权限
 logout
+
+# 4. (可选) 检测摄像头是否正常
+./检测摄像头.sh
 ```
 
 安装脚本会自动完成：

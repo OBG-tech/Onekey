@@ -250,7 +250,7 @@ const translations = {
 // i18n 核心类
 class I18n {
     constructor() {
-        this.currentLang = localStorage.getItem('app_language') || 'zh';
+        this.currentLang = localStorage.getItem('app_language') || 'en';
         this.translations = translations;
     }
     

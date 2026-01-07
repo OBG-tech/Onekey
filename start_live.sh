@@ -12,6 +12,11 @@ PORT=${1:-8082}
 OBS_WS_PORT=4455
 OBS_WS_PASSWORD=""  # 如果设置了密码，在这里填写
 
+# 启动直播相关的服务
+
+# 切换到脚本所在目录
+cd "$(dirname "$0")"
+
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -131,7 +136,7 @@ source .venv/bin/activate
 # 检查obs-websocket-py (用于OBS录制控制)
 echo ""
 echo -e "${YELLOW}🔍 检查 obs-websocket-py...${NC}"
-if python -c "import obswebsocket" 2>/dev/null; then
+if python3 -c "import obswebsocket" 2>/dev/null; then
     echo -e "${GREEN}✅ obs-websocket-py 已安装${NC}"
     OBS_CONTROL_AVAILABLE=true
 else
@@ -153,7 +158,7 @@ read -p "请输入选项 [1-3]: " choice
 case $choice in
     1)
         echo -e "${GREEN}🔴 启动OBS模式 (端口: $PORT)...${NC}"
-        nohup python integrated_system.py --obs --port $PORT > service_output.log 2>&1 &
+        nohup python3 integrated_system.py --obs --port $PORT > service_output.log 2>&1 &
         PYTHON_PID=$!
         ;;
     2)
@@ -165,7 +170,7 @@ case $choice in
         echo ""
         read -p "请输入摄像头索引 [0-2]: " cam_index
         echo -e "${GREEN}🎥 启动摄像头模式 (索引: $cam_index, 端口: $PORT)...${NC}"
-        nohup python integrated_system.py --camera $cam_index --port $PORT > service_output.log 2>&1 &
+        nohup python3 integrated_system.py --camera $cam_index --port $PORT > service_output.log 2>&1 &
         PYTHON_PID=$!
         ;;
     3)
@@ -175,12 +180,12 @@ case $choice in
             exit 1
         fi
         echo -e "${GREEN}🎬 启动视频分析 (端口: $PORT)...${NC}"
-        nohup python integrated_system.py --video "$video_path" --port $PORT > service_output.log 2>&1 &
+        nohup python3 integrated_system.py --video "$video_path" --port $PORT > service_output.log 2>&1 &
         PYTHON_PID=$!
         ;;
     *)
         echo -e "${RED}无效选项，使用默认OBS模式${NC}"
-        nohup python integrated_system.py --obs --port $PORT > service_output.log 2>&1 &
+        nohup python3 integrated_system.py --obs --port $PORT > service_output.log 2>&1 &
         PYTHON_PID=$!
         ;;
 esac
@@ -220,7 +225,7 @@ if [ "$OBS_CONTROL_AVAILABLE" = true ]; then
         echo -e "${YELLOW}🎬 自动启动 OBS 录制...${NC}"
         sleep 3
         
-        if python obs_auto_record.py start --port $OBS_WS_PORT --password "$OBS_WS_PASSWORD" 2>/dev/null; then
+        if python3 obs_auto_record.py start --port $OBS_WS_PORT --password "$OBS_WS_PASSWORD" 2>/dev/null; then
             echo -e "${GREEN}✅ OBS 录制已自动启动！${NC}"
             echo -e "${GREEN}   录像将保存到 OBS 设置的路径${NC}"
             AUTO_RECORDING=true
@@ -279,10 +284,10 @@ fi
 echo ""
 echo -e "${YELLOW}💡 使用提示:${NC}"
 echo "  • 查看实时日志: tail -f service_output.log"
-echo "  • 查看OBS录制状态: python obs_auto_record.py status"
+echo "  • 查看OBS录制状态: python3 obs_auto_record.py status"
 
 if [ "$AUTO_RECORDING" = true ]; then
-    echo "  • 停止系统和录制: kill $PYTHON_PID && python obs_auto_record.py stop"
+    echo "  • 停止系统和录制: kill $PYTHON_PID && python3 obs_auto_record.py stop"
     echo -e "  • 或使用: ./stop_with_full_recording.sh"
 else
     echo "  • 停止系统: kill $PYTHON_PID"

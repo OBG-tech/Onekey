@@ -15,7 +15,7 @@ else
 fi
 
 # 运行检测脚本
-python3 detect_cameras_macos.py
+python3 detect_cameras.py
 
 echo ""
 echo "💡 提示："

@@ -639,7 +639,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             self.send_json_response({
                 "status": "info",
                 "message": "Please restart the script to start tracking again.",
-                "command": "cd /Volumes/ZZH_Only/毕设 && source .venv/bin/activate && python3 integrated_system.py --camera 0 --no-window"
+                "command": "cd ~/onekey && source .venv/bin/activate && python3 integrated_system.py --camera 0 --no-window"
             })
             
         elif self.path == '/api/restart':
@@ -895,7 +895,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         
         self.send_json_response({
             "status": "stopped",
-            "message": "系统已完全停止",
+            "message": "System completely stopped",
             "saved": True
         })
     
@@ -1161,45 +1161,20 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if key_moments_manager is None:
             return {"moments": [], "count": 0, "error": "Key moments manager not initialized"}
         
+        # 🛡️ Safety: If empty, try to reload from disk
+        if not key_moments_manager.moments:
+            try:
+                print("⚠️ Key moments list empty, attempting reload from disk...")
+                key_moments_manager._load_moments()
+            except Exception as e:
+                print(f"❌ Failed to reload moments: {e}")
+
         moments = key_moments_manager.get_moments()
         
-        # 🔍 质量过滤：移除低质量的AI识别时刻，但保留所有用户标记
-        # 可通过环境变量 AI_MOMENT_MIN_IMPORTANCE 调整阈值（默认0.3）
-        min_importance = float(os.environ.get('AI_MOMENT_MIN_IMPORTANCE', '0.3'))
-        
-        filtered_moments = []
+        # 🟢 Force Show ALL moments (Disable filtering to match 8084 viewer)
+        filtered_moments = moments
         skipped_count = 0
-        
-        for m in moments:
-            # 用户手动标记的时刻：永远保留（即使无音频）
-            if m.get('source') == 'user_anchor':
-                filtered_moments.append(m)
-                continue
-            
-            # AI自动检测的时刻：应用质量过滤
-            if m.get('source') == 'ai_detected':
-                # 跳过明确标记为"无音频"的时刻
-                if m.get('ai_tagline') in ('🎧 无音频', '🎧 No Audio'):
-                    skipped_count += 1
-                    continue
-                
-                # 跳过重要性过低的时刻
-                importance = m.get('ai_importance', 0.0)
-                if importance < min_importance:
-                    skipped_count += 1
-                    continue
-            
-            # 多模态分析的时刻：也应用类似过滤
-            if m.get('source') == 'multimodal':
-                if m.get('ai_tagline') in ('🎧 无音频', '🎧 No Audio'):
-                    skipped_count += 1
-                    continue
-                importance = m.get('ai_importance', 0.0)
-                if importance < min_importance:
-                    skipped_count += 1
-                    continue
-            
-            filtered_moments.append(m)
+
         
         # 添加图片和视频 URL
         for m in filtered_moments:
@@ -1409,7 +1384,23 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
                 
                 with open(video_path, 'rb') as f:
                     f.seek(start)
-                    self.wfile.write(f.read(content_length))
+                    remaining = content_length
+                    chunk_size = 64 * 1024  # 64KB chunks
+                    
+                    while remaining > 0:
+                        try:
+                            read_size = min(chunk_size, remaining)
+                            chunk = f.read(read_size)
+                            if not chunk:
+                                break
+                            self.wfile.write(chunk)
+                            remaining -= len(chunk)
+                        except (ConnectionResetError, BrokenPipeError):
+                            # 客户端断开连接，这是正常现象（例如视频seek或暂停）
+                            break
+                        except Exception as e:
+                            print(f"Error streaming video chunk: {e}")
+                            break
             else:
                 self.send_error(404, "Key moment video not found")
         except Exception as e:
@@ -1820,7 +1811,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
                 "available": True,
                 "is_running": False,
                 "is_recording": False,
-                "message": "ASR 引擎未启动"
+                "message": "ASR engine not started"
             }
         
         state = realtime_asr_engine.get_status()
@@ -1838,7 +1829,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
                 "success": False,
                 "transcript": "",
                 "segments": [],
-                "error": "ASR 引擎未启动"
+                "error": "ASR engine not started"
             }
         
         state = realtime_asr_engine.get_status()
@@ -1943,7 +1934,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             
             self.send_json_response({
                 "success": success,
-                "message": "实时语音识别已启动" if success else "启动失败"
+                "message": "Real-time ASR started" if success else "Start failed"
             })
             
         except Exception as e:
@@ -1962,7 +1953,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if realtime_asr_engine is None:
             self.send_json_response({
                 "success": True,
-                "message": "ASR 引擎未运行"
+                "message": "ASR engine not running"
             })
             return
         
@@ -1970,7 +1961,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             realtime_asr_engine.stop()
             self.send_json_response({
                 "success": True,
-                "message": "实时语音识别已停止"
+                "message": "Real-time ASR stopped"
             })
         except Exception as e:
             self.send_json_response({
@@ -1985,14 +1976,14 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if realtime_asr_engine is None:
             self.send_json_response({
                 "success": False,
-                "error": "ASR 引擎未启动"
+                "error": "ASR engine not started"
             })
             return
         
         realtime_asr_engine.pause()
         self.send_json_response({
             "success": True,
-            "message": "录音已暂停"
+            "message": "Recording paused"
         })
     
     def _handle_realtime_asr_resume(self):
@@ -2002,14 +1993,14 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if realtime_asr_engine is None:
             self.send_json_response({
                 "success": False,
-                "error": "ASR 引擎未启动"
+                "error": "ASR engine not started"
             })
             return
         
         realtime_asr_engine.resume()
         self.send_json_response({
             "success": True,
-            "message": "录音已恢复"
+            "message": "Recording resumed"
         })
     
     def _handle_realtime_asr_clear(self):
@@ -2024,7 +2015,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         
         self.send_json_response({
             "success": True,
-            "message": "转写记录已清空"
+            "message": "Transcript cleared"
         })
     
     def _handle_clear_people(self):
@@ -2058,14 +2049,14 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             return {
                 "available": False,
                 "is_generating": False,
-                "message": "AI会议纪要不可用"
+                "message": "AI meeting notes unavailable"
             }
         
         if meeting_notes_generator is None:
             return {
                 "available": True,
                 "is_generating": False,
-                "message": "未启动"
+                "message": "Not started"
             }
         
         return meeting_notes_generator.get_status()
@@ -2093,7 +2084,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if not MEETING_NOTES_AVAILABLE:
             self.send_json_response({
                 "success": False,
-                "error": "AI会议纪要不可用"
+                "error": "AI meeting notes unavailable"
             })
             return
         
@@ -2118,7 +2109,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             
             self.send_json_response({
                 "success": success,
-                "message": "AI会议纪要生成已启动" if success else "启动失败"
+                "message": "AI meeting notes generation started" if success else "Start failed"
             })
             
         except Exception as e:
@@ -2137,7 +2128,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if meeting_notes_generator is None:
             self.send_json_response({
                 "success": True,
-                "message": "会议纪要生成器未运行"
+                "message": "Meeting notes generator not running"
             })
             return
         
@@ -2145,7 +2136,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             meeting_notes_generator.stop()
             self.send_json_response({
                 "success": True,
-                "message": "AI会议纪要生成已停止"
+                "message": "AI meeting notes generation stopped"
             })
         except Exception as e:
             self.send_json_response({
@@ -2171,7 +2162,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             ai_live_commentary.start()
             self.send_json_response({
                 "success": True,
-                "message": "AI直播间已启动"
+                "message": "AI live room started"
             })
         except Exception as e:
             self.send_json_response({
@@ -2186,7 +2177,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if ai_live_commentary is None:
             self.send_json_response({
                 "success": True,
-                "message": "AI直播间未运行"
+                "message": "AI live room not running"
             })
             return
         
@@ -2194,7 +2185,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             ai_live_commentary.stop()
             self.send_json_response({
                 "success": True,
-                "message": "AI直播间已停止"
+                "message": "AI live room stopped"
             })
         except Exception as e:
             self.send_json_response({
@@ -2799,7 +2790,7 @@ def process_face_recognition(frame, boxes, frame_count, face_app):
             
             if face_crop.size > 0:
                 person_id = face_db.add_face(embedding, frame_image=face_crop)
-                print(f"🆕 发现新人物: Person_{person_id}")
+                print(f"🆕 New person found: Person_{person_id}")
         
         # 记录检测
         snapshot = frame.copy() if frame_count % 30 == 0 else None
@@ -2818,27 +2809,70 @@ def process_face_recognition(frame, boxes, frame_count, face_app):
 
 # 全局模型缓存
 _yolo_model_cache = None
+YOLO_DEVICE = "cpu"
 
 def get_yolo_model():
     """延迟加载YOLO模型(单例模式)，自动使用GPU加速"""  
-    global _yolo_model_cache
+    global _yolo_model_cache, YOLO_DEVICE
     if _yolo_model_cache is None:
         import torch
         
-        # 检测可用设备：优先MPS(macOS GPU)，其次CUDA，最后CPU
-        if torch.backends.mps.is_available():
-            device = "mps"
-            print("🚀 首次加载YOLO模型(MPS GPU加速),请稍候...")
+        # 1. OpenVINO Check (AMD 780M)
+        use_openvino = False
+        try:
+             # Check if we should check OpenVINO (if no CUDA and not MacOS MPS)
+             is_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+             if not torch.cuda.is_available() and not is_mps:
+                from openvino.runtime import Core
+                if "GPU" in Core().available_devices:
+                    use_openvino = True
+                    YOLO_DEVICE = "GPU"
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"⚠️ OpenVINO Check Error: {e}")
+
+        # 2. Device Selection
+        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            YOLO_DEVICE = "mps"
+            print("🚀 首次加载YOLO模型(MPS GPU加速)...")
+            _yolo_model_cache = YOLO(MODEL_PATH)
+            _yolo_model_cache.to(YOLO_DEVICE)
         elif torch.cuda.is_available():
-            device = "cuda"
-            print("🚀 首次加载YOLO模型(CUDA GPU加速),请稍候...")
+            YOLO_DEVICE = "cuda"
+            print("🚀 首次加载YOLO模型(CUDA GPU加速)...")
+            _yolo_model_cache = YOLO(MODEL_PATH)
+            _yolo_model_cache.to(YOLO_DEVICE)
+        elif use_openvino:
+            print(f"🚀 首次加载YOLO模型(OpenVINO AMD GPU加速)...")
+            # MODEL_PATH usually models/yolo11n.pt
+            # Export path usually models/yolo11n_openvino_model
+            ov_path = os.path.splitext(MODEL_PATH)[0] + "_openvino_model"
+            
+            if not os.path.exists(ov_path):
+                print(f"⚠️ 正在导出 OpenVINO 模型: {ov_path}")
+                try:
+                    YOLO(MODEL_PATH).export(format="openvino")
+                except Exception as e:
+                    print(f"❌ 导出失败: {e}, 回退到CPU")
+                    YOLO_DEVICE = "cpu"
+                    _yolo_model_cache = YOLO(MODEL_PATH)
+                    return _yolo_model_cache
+
+            if os.path.exists(ov_path):
+                _yolo_model_cache = YOLO(ov_path, task="detect")
+                # Reset device to cpu for tracker compatibility (inference happens on OpenVINO runtime)
+                YOLO_DEVICE = "cpu"
+            else:
+                YOLO_DEVICE = "cpu"
+                _yolo_model_cache = YOLO(MODEL_PATH)
         else:
-            device = "cpu"
-            print("🚀 首次加载YOLO模型(CPU),请稍候...")
+            YOLO_DEVICE = "cpu"
+            print("🚀 首次加载YOLO模型(CPU)...")
+            _yolo_model_cache = YOLO(MODEL_PATH)
+            _yolo_model_cache.to(YOLO_DEVICE)
         
-        _yolo_model_cache = YOLO(MODEL_PATH)
-        _yolo_model_cache.to(device)
-        print(f"✅ YOLO模型加载完成 (设备: {device})")
+        print(f"✅ YOLO模型加载完成 (Device: {YOLO_DEVICE})")
     return _yolo_model_cache
 
 def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_window=True, video_source_path=None):
@@ -2913,6 +2947,7 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
             conf=0.25,
             classes=[0],
             verbose=False,
+            device=YOLO_DEVICE,
             tracker="multi_person_tracker/configs/bytetrack_persistent.yaml"
             if Path("multi_person_tracker/configs/bytetrack_persistent.yaml").exists()
             else "bytetrack.yaml"
@@ -2991,7 +3026,7 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                                 face_db.person_images[person_id] = str(img_path)
                                 face_db.person_names[person_id] = f"Person_{person_id}"
                                 face_db.active_people_this_session.add(person_id)
-                                print(f"👤 新人物: Person_{person_id} (Track#{track_id})")
+                                print(f"👤 New person: Person_{person_id} (Track#{track_id})")
                             
                             # 更新person_face_map用于后续绘制
                             person_face_map[track_id] = person_id
@@ -3642,8 +3677,8 @@ def main():
                 pass
             # macOS 下常见：PyAudio/OpenCV 等 native 资源在解释器收尾时触发 SIGTRAP。
             # 这里做一次“清理后强退”，避免 Trace/BPT trap: 5。
-            if sys.platform == "darwin":
-                os._exit(0)
+            # 在Linux上也使用 os._exit(0) 以确保所有线程（如ASR、LLM）立即终止，防止挂起
+            os._exit(0)
             return
         
     except Exception as e:

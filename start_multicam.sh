@@ -2,6 +2,9 @@
 # 多摄像头集成系统启动脚本
 # 使用4个USB摄像头，2x2拼接，高画质，60 FPS
 
+# 切换到脚本所在目录
+cd "$(dirname "$0")"
+
 # 颜色定义
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -19,7 +22,7 @@ if [ -d ".venv" ]; then
     echo -e "${GREEN}✅ 激活虚拟环境${NC}"
     source .venv/bin/activate
 else
-    echo -e "${YELLOW}⚠️  未找到虚拟环境，请先运行: python -m venv .venv${NC}"
+    echo -e "${YELLOW}⚠️  未找到虚拟环境，请先运行: python3 -m venv .venv${NC}"
     exit 1
 fi
 
@@ -33,10 +36,38 @@ else
     echo -e "${YELLOW}⚠️  未找到 .env.local 文件${NC}"
 fi
 
+# Fix DISPLAY variable for VS Code Terminal
+if [ -z "$DISPLAY" ]; then
+    export DISPLAY=:0
+    echo -e "${YELLOW}⚠️  DISPLAY 未设置, 自动设置为 :0${NC}"
+fi
+
+# Cleanup old processes
+echo -e "${BLUE}🧹 检查残留进程...${NC}"
+old_pids=$(pgrep -f "start_multicam_system.py")
+if [ ! -z "$old_pids" ]; then
+    echo -e "${YELLOW}⚠️  清理旧进程 ($old_pids)...${NC}"
+    kill -9 $old_pids > /dev/null 2>&1
+    sleep 1
+fi
+
+# Auto-detected cameras (New Logic)
+DETECTED_CAMERAS=""
+if [ -f "detect_cameras_v2.py" ]; then
+   DETECTED_CAMERAS=$(python3 detect_cameras_v2.py)
+fi
+
 echo ""
 
 # 默认参数
-CAMERAS="${CAMERAS:-0,1,2,3}"
+# Default to detected cameras if available, else 0,2,4,6
+DEFAULT_CAMS="0,2,4,6"
+if [ ! -z "$DETECTED_CAMERAS" ]; then
+    DEFAULT_CAMS="$DETECTED_CAMERAS"
+fi
+
+CAMERAS="${CAMERAS:-$DEFAULT_CAMS}"
+# User requested 1920x1080 @ 60fps
 FPS="${FPS:-60}"
 RESOLUTION="${RESOLUTION:-1920x1080}"
 PORT="${PORT:-8082}"
@@ -45,7 +76,7 @@ PORT="${PORT:-8082}"
 if [ "$1" == "--interactive" ] || [ "$1" == "-i" ]; then
     echo -e "${BLUE}🎮 交互式配置${NC}\n"
     
-    echo "请输入摄像头索引 (逗号分隔，例如: 0,1,2,3)"
+    echo "请输入摄像头索引 (逗号分隔，例如: 0,2,4,6)"
     read -p "摄像头 [$CAMERAS]: " input_cameras
     if [ ! -z "$input_cameras" ]; then
         # 将中文逗号替换为英文逗号
@@ -87,7 +118,7 @@ echo ""
 
 # 检查摄像头
 echo -e "${BLUE}📹 检测摄像头...${NC}"
-python -c "
+python3 -c "
 import cv2
 cameras = [${CAMERAS}]
 for idx in cameras:
@@ -110,7 +141,7 @@ echo ""
 if [ "$1" == "--test" ]; then
     echo -e "${YELLOW}🧪 测试模式：仅预览拼接画面${NC}\n"
     
-    python start_multicam_system.py \
+    python3 start_multicam_system.py \
         --cameras $CAMERAS \
         --fps $FPS \
         --resolution $RESOLUTION \
@@ -124,13 +155,14 @@ echo -e "${GREEN}🚀 启动多摄像头集成系统...${NC}\n"
 
 # 启动 Key Moments Viewer 服务 (端口 8084)
 echo -e "${BLUE}📹 启动 Key Moments Viewer (端口 8084)...${NC}"
-python key_moments_viewer.py > /dev/null 2>&1 &
+python3 key_moments_viewer.py > /dev/null 2>&1 &
 MOMENTS_VIEWER_PID=$!
 sleep 1
 echo -e "${GREEN}✅ Key Moments Viewer: http://localhost:8084${NC}\n"
 
 # 启动主系统
-python start_multicam_system.py \
+echo -e "${GREEN}🚀 系统正在启动... 请稍候片刻等待窗口出现${NC}"
+python3 start_multicam_system.py \
     --cameras $CAMERAS \
     --fps $FPS \
     --resolution $RESOLUTION \

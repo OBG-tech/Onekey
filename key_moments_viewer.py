@@ -9,7 +9,7 @@ import json
 import os
 import mimetypes
 from pathlib import Path
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 import threading
 
@@ -39,7 +39,8 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>⬛ Key Moments ⬜</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap');
+        /* Removed Google Fonts for offline/China speed */
+        /* @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap'); */
         
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -54,11 +55,13 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         }
         
         body {
-            font-family: 'VT323', monospace;
+            /* font-family: 'VT323', monospace; */
+            font-family: 'Courier New', Courier, monospace;
             background: var(--bg);
             color: var(--fg);
             min-height: 100vh;
-            font-size: 18px;
+            font-size: 16px;
+            letter-spacing: -0.5px;
         }
         
         .scanlines {
@@ -81,10 +84,14 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         }
         
         h1 {
-            font-family: 'Press Start 2P', cursive;
-            font-size: 16px;
+            /* font-family: 'Press Start 2P', cursive; */
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: 800;
+            font-size: 18px;
             color: var(--accent);
             text-shadow: 2px 2px 0 #333;
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
         
         .main-layout {
@@ -628,6 +635,20 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 class MomentsHandler(SimpleHTTPRequestHandler):
     """处理Key Moments请求的Handler"""
     
+    def translate_path(self, path):
+        """Map URL paths to filesystem paths for SimpleHTTPRequestHandler"""
+        parsed = urlparse(path)
+        path = parsed.path
+        
+        if path.startswith('/media/'):
+            filename = path[7:]
+            # Basic security check
+            if '..' in filename:
+                return None
+            return str(MOMENTS_MEDIA_DIR / filename)
+        
+        return super().translate_path(path)
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
@@ -649,28 +670,15 @@ class MomentsHandler(SimpleHTTPRequestHandler):
             return
         
         if path.startswith('/media/'):
-            filename = path[7:]
-            filepath = MOMENTS_MEDIA_DIR / filename
-            
-            if filepath.exists():
-                mime_type, _ = mimetypes.guess_type(str(filepath))
-                if mime_type is None:
-                    mime_type = 'application/octet-stream'
-                
-                self.send_response(200)
-                self.send_header('Content-Type', mime_type)
-                self.send_header('Content-Length', filepath.stat().st_size)
-                self.send_header('Content-Disposition', f'inline; filename="{filename}"')
-                self.end_headers()
-                
-                with open(filepath, 'rb') as f:
-                    self.wfile.write(f.read())
-                return
-            else:
-                self.send_error(404, f'File not found: {filename}')
-                return
-        
+            # Use SimpleHTTPRequestHandler's built-in file serving (supports Range requests!)
+            super().do_GET()
+            return
+
         if path.startswith('/download/'):
+            # For download, we force Content-Disposition, so we might keep custom logic
+            # or just use the media logic but add the header?
+            # Creating a download link is easier with the media logic if we can inject header.
+            # But the existing manual code is fine for download since speed matters less than video seek.
             filename = path[10:]
             filepath = MOMENTS_MEDIA_DIR / filename
             
@@ -681,8 +689,10 @@ class MomentsHandler(SimpleHTTPRequestHandler):
                 self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
                 self.end_headers()
                 
+                # Use shutil.copyfileobj for efficient streaming
+                import shutil
                 with open(filepath, 'rb') as f:
-                    self.wfile.write(f.read())
+                    shutil.copyfileobj(f, self.wfile)
                 return
             else:
                 self.send_error(404, f'File not found: {filename}')
@@ -691,12 +701,16 @@ class MomentsHandler(SimpleHTTPRequestHandler):
         self.send_error(404, 'Not found')
     
     def log_message(self, format, *args):
+        # Reduce log noise
+        if "GET /media/" in args[0] or "GET /api/" in args[0]:
+            return
         print(f"[MomentsViewer] {args[0]}")
 
 
 def run_server():
     """启动服务器"""
-    server = HTTPServer(('0.0.0.0', PORT), MomentsHandler)
+    # Use ThreadingHTTPServer for concurrent requests (essential for video buffering)
+    server = ThreadingHTTPServer(('0.0.0.0', PORT), MomentsHandler)
     print(f"""
 ╔════════════════════════════════════════════════════════╗
 ║   📹 Key Moments Viewer                                ║

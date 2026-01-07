@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
@@ -2171,7 +2171,7 @@
     <!-- 悬浮红色标记按钮 (FAB) -->
     <button class="floating-mark-btn" onclick="markKeyMoment()" title="Mark Key Moment (Space)">
         🔴
-        <span class="fab-tooltip">标记关键时刻 (Space)</span>
+        <span class="fab-tooltip" data-zh="标记关键时刻 (Space)" data-en="Mark Key Moment (Space)">Mark Key Moment (Space)</span>
     </button>
 
     <!-- 主窗口 -->
@@ -2181,11 +2181,11 @@
             <div class="title-bar-text">🎬 Integrated Video Analysis System</div>
             <!-- 语言切换按钮 -->
             <div style="position: absolute; right: 10px; display: flex; gap: 4px; align-items: center;">
-                <button onclick="window.i18n && window.i18n.setLanguage('zh')"
+                <button onclick="switchLanguage('zh')"
                     style="padding: 3px 8px; border: 2px solid black; background: white; cursor: pointer; font-size: 9px; font-family: 'Press Start 2P', sans-serif;">
                     中文
                 </button>
-                <button onclick="window.i18n && window.i18n.setLanguage('en')"
+                <button onclick="switchLanguage('en')"
                     style="padding: 3px 8px; border: 2px solid black; background: white; cursor: pointer; font-size: 9px; font-family: 'Press Start 2P', sans-serif;">
                     EN
                 </button>
@@ -2649,13 +2649,25 @@
 
     <script>
         // 语言切换
-        let currentLang = 'zh';
+        let currentLang = localStorage.getItem('app_language') || localStorage.getItem('lang') || 'en';
+        
+        // Ensure switchLanguage is called on load to set initial state
+        document.addEventListener('DOMContentLoaded', () => {
+             switchLanguage(currentLang);
+        });
+
         function switchLanguage(lang) {
             currentLang = lang;
             document.querySelectorAll('[data-zh]').forEach(el => {
                 el.textContent = lang === 'zh' ? el.getAttribute('data-zh') : el.getAttribute('data-en');
             });
             localStorage.setItem('lang', lang);
+            localStorage.setItem('app_language', lang);
+            
+            // Sync with i18n class if available
+            if (window.i18n) {
+                window.i18n.setLanguage(lang);
+            }
         }
 
         // ============================================================
@@ -3421,9 +3433,9 @@
             document.getElementById('timeline-modal').classList.remove('show');
         }
 
-        // 删除 Timeline 中的帧
+        // Delete Frame in Timeline
         function deleteTimelineFrame(personId, frameNum) {
-            if (confirm(`确定要删除 Frame ${frameNum} 吗？`)) {
+            if (confirm(`Are you sure you want to delete Frame ${frameNum}?`)) {
                 fetch(`/api/timeline/${personId}/frame/${frameNum}`, {
                     method: 'DELETE',
                     headers: {
@@ -3448,19 +3460,19 @@
                                 }
                             });
                         } else {
-                            alert('删除失败：' + data.message);
+                            alert('Delete failed: ' + data.message);
                         }
                     })
                     .catch(error => {
                         console.error('Delete error:', error);
-                        alert('删除出错：' + error.message);
+                        alert('Error deleting: ' + error.message);
                     });
             }
         }
 
-        // 删除人物记录
+        // Delete person record
         function deletePersonRecord(personId, personName) {
-            if (confirm(`确定要删除 ${personName} 的记录吗？`)) {
+            if (confirm(`Are you sure you want to delete record for ${personName}?`)) {
                 fetch(`/api/people/${personId}`, {
                     method: 'DELETE',
                     headers: {
@@ -3470,15 +3482,15 @@
                     .then(response => response.json())
                     .then(data => {
                         if (data.status === 'success') {
-                            // 刷新 people 列表
+                            // Refresh people list
                             updatePeople();
                         } else {
-                            alert('删除失败：' + data.message);
+                            alert('Delete failed: ' + data.message);
                         }
                     })
                     .catch(error => {
                         console.error('Delete error:', error);
-                        alert('删除出错：' + error.message);
+                        alert('Error deleting: ' + error.message);
                     });
             }
         }
@@ -3491,7 +3503,7 @@
             }
 
             if (!window.allMoments || !window.allMoments[index]) {
-                alert('无法找到该时刻');
+                alert('Moment not found');
                 return;
             }
 
@@ -3505,10 +3517,10 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        // 删除成功，刷新列表
+                        // Success, refresh list
                         updateKeyMoments();
                     } else {
-                        alert('删除失败：' + (data.message || '未知错误'));
+                        alert('Delete failed: ' + (data.message || 'Unknown error'));
                     }
                 })
                 .catch(error => {
@@ -3537,7 +3549,7 @@
                         // 如果API失败，显示手动重启说明
                         alert('Auto-restart failed.\\n\\nManual restart:\\n' +
                             '1. Open Terminal\\n' +
-                            '2. cd /Volumes/ZZH_Only/毕设\\n' +
+                            '2. cd ~/onekey\\n' +
                             '3. source .venv/bin/activate\\n' +
                             '4. python3 integrated_system.py --camera 0 --no-window');
                     });
@@ -6258,11 +6270,11 @@
             header.style.justifyContent = 'space-between';
             header.style.padding = '8px 10px';
             header.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
-            header.innerHTML = `<div style="font-weight:700;">📜 分析日志</div>`;
+            header.innerHTML = `<div style="font-weight:700;">📜 Analysis Logs</div>`;
 
             const btns = document.createElement('div');
             const refreshBtn = document.createElement('button');
-            refreshBtn.textContent = '刷新';
+            refreshBtn.textContent = 'Refresh';
             refreshBtn.style.marginRight = '8px';
             refreshBtn.style.padding = '4px 8px';
             refreshBtn.style.border = '1px solid rgba(255,255,255,0.2)';
@@ -6272,7 +6284,7 @@
             refreshBtn.style.cursor = 'pointer';
 
             const toggleBtn = document.createElement('button');
-            toggleBtn.textContent = '折叠';
+            toggleBtn.textContent = 'Collapse';
             toggleBtn.style.padding = '4px 8px';
             toggleBtn.style.border = '1px solid rgba(255,255,255,0.2)';
             toggleBtn.style.background = 'rgba(255,255,255,0.08)';
@@ -6294,7 +6306,7 @@
             pre.style.margin = '0';
             pre.style.whiteSpace = 'pre-wrap';
             pre.style.wordBreak = 'break-word';
-            pre.textContent = '加载中...';
+            pre.textContent = 'Loading...';
 
             body.appendChild(pre);
             wrap.appendChild(header);
@@ -6307,12 +6319,12 @@
                     const data = await res.json();
                     const lines = Array.isArray(data.lines) ? data.lines : [];
                     if (!lines.length) {
-                        pre.textContent = '暂无分析日志';
+                        pre.textContent = 'No analysis logs available';
                     } else {
                         pre.textContent = lines.join('\n');
                     }
                 } catch (err) {
-                    pre.textContent = `读取日志失败: ${err}`;
+                    pre.textContent = `Failed to load logs: ${err}`;
                 }
             }
 
@@ -6320,11 +6332,11 @@
             toggleBtn.onclick = () => {
                 if (body.style.display === 'none') {
                     body.style.display = 'block';
-                    toggleBtn.textContent = '折叠';
+                    toggleBtn.textContent = 'Collapse';
                     wrap.style.maxHeight = '220px';
                 } else {
                     body.style.display = 'none';
-                    toggleBtn.textContent = '展开';
+                    toggleBtn.textContent = 'Expand';
                     wrap.style.maxHeight = '40px';
                 }
             };

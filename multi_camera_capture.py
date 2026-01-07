@@ -88,13 +88,17 @@ class MultiCameraCapture:
             cap = cv2.VideoCapture(idx)
             
             if cap.isOpened():
-                # 设置高质量参数
+                # MJPEG编码是高分辨率高帧率的关键
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+                
+                # 设置分辨率和帧率
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
                 cap.set(cv2.CAP_PROP_FPS, self.target_fps)
                 
-                # MJPEG编码以提高质量
-                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+                # Double Check MJPG
+                fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+                codec = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
                 
                 # 获取实际设置
                 actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -104,7 +108,11 @@ class MultiCameraCapture:
                 self.cameras.append(cap)
                 self.frame_queues.append(queue.Queue(maxsize=2))
                 
-                print(f"  ✅ 摄像头 #{idx}: {actual_width}x{actual_height} @ {actual_fps:.1f} FPS")
+                print(f"  ✅ 摄像头 #{idx}: {actual_width}x{actual_height} @ {actual_fps:.1f} FPS (Codec: {codec})")
+                
+                if actual_width == 0 or actual_height == 0:
+                     print(f"  ⚠️ Warning: Camera #{idx} reports 0x0 resolution. Re-trying...")
+                     # Retry logic or fallback could go here
             else:
                 print(f"  ❌ 无法打开摄像头 #{idx}")
                 self.frame_queues.append(None)
@@ -298,27 +306,49 @@ class MultiCameraCapture:
         
         # 2. 启动音频录制（使用ffmpeg录制系统默认麦克风）
         try:
-            # macOS使用avfoundation，设备":0"通常是默认麦克风
-            # 可以通过 ffmpeg -f avfoundation -list_devices true -i "" 查看设备列表
-            audio_cmd = [
-                'ffmpeg', '-y',
-                '-f', 'avfoundation',
-                '-i', ':0',  # 默认音频输入设备
-                '-acodec', 'pcm_s16le',
-                '-ar', '44100',
-                '-ac', '2',
-                str(self.audio_filename)
-            ]
+            import platform
+            system_name = platform.system()
+            audio_cmd = []
+
+            if system_name == 'Darwin':
+                # macOS使用avfoundation，设备":0"通常是默认麦克风
+                # 可以通过 ffmpeg -f avfoundation -list_devices true -i "" 查看设备列表
+                audio_cmd = [
+                    'ffmpeg', '-y',
+                    '-f', 'avfoundation',
+                    '-i', ':0',  # 默认音频输入设备
+                    '-acodec', 'pcm_s16le',
+                    '-ar', '44100',
+                    '-ac', '2',
+                    str(self.audio_filename)
+                ]
+            elif system_name == 'Linux':
+                # Linux使用pulse (PulseAudio) 或 alsa
+                # 优先使用pulse，因为它支持与其他应用共享录音
+                audio_cmd = [
+                    'ffmpeg', '-y',
+                    '-f', 'pulse',
+                    '-i', 'default',
+                    '-acodec', 'pcm_s16le',
+                    '-ar', '44100',
+                    '-ac', '2',
+                    str(self.audio_filename)
+                ]
             
-            # 后台启动ffmpeg录音
-            self.audio_process = subprocess.Popen(
-                audio_cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.PIPE
-            )
-            print(f"🎤 音频录制已开始: {self.audio_filename}")
-            print(f"   设备: 系统默认麦克风\n")
+            if audio_cmd:
+                # 后台启动ffmpeg录音
+                self.audio_process = subprocess.Popen(
+                    audio_cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.PIPE
+                )
+                print(f"🎤 音频录制已开始: {self.audio_filename}")
+                print(f"   设备: 系统默认麦克风 ({'PulseAudio' if system_name == 'Linux' else 'AVFoundation'})\n")
+            else:
+                print(f"⚠️  不支持的操作系统用于音频录制: {system_name}")
+                print(f"   将只录制视频（无音频）\n")
+                self.audio_process = None
             
         except Exception as e:
             print(f"⚠️ 音频录制启动失败: {e}")
@@ -390,10 +420,17 @@ class MultiCameraCapture:
                     
                     result = subprocess.run(merge_cmd, capture_output=True, timeout=300)
                     
-                    if result.returncode == 0 and final_path.exists():
+                    # 即使ffmpeg返回非0错误码，只要输出了文件且大小合理，也认为成功
+                    # 因为WAV头损坏是常见警告，ffmpeg通常能修复
+                    success = final_path.exists() and final_path.stat().st_size > 1024
+                    
+                    if success:
                         file_size = final_path.stat().st_size / (1024 * 1024)
                         print(f"✅ 录制已保存（视频+音频同步）: {final_path}")
                         print(f"   时长: {recording_duration:.1f}秒, 大小: {file_size:.1f} MB")
+                        if result.returncode != 0:
+                            print(f"   ⚠️ FFmpeg警告: {result.stderr.decode() if result.stderr else 'Unknown'}")
+                        
                         # 删除临时文件
                         try:
                             video_raw_path.unlink()

@@ -37,8 +37,8 @@ print("=" * 60)
 # 解析参数
 import argparse
 parser = argparse.ArgumentParser(description='多摄像头集成系统')
-parser.add_argument('--cameras', type=str, default='0,1,2,3',
-                   help='摄像头索引，逗号分隔 (默认: 0,1,2,3)')
+parser.add_argument('--cameras', type=str, default='0,2,4,6',
+                   help='摄像头索引，逗号分隔 (默认: 0,2,4,6)')
 parser.add_argument('--fps', type=int, default=60,
                    help='目标帧率 (默认: 60)')
 parser.add_argument('--resolution', type=str, default='1920x1080',
@@ -59,7 +59,7 @@ camera_indices = [int(x.strip()) for x in args.cameras.split(',') if x.strip()]
 
 if not camera_indices:
     print("❌ 错误：未指定有效的摄像头索引")
-    print("   请输入如: 0,1 或 0,1,2,3")
+    print("   请输入如: 0,2,4,6 或 0,1,2,3")
     sys.exit(1)
 
 # 解析分辨率
