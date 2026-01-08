@@ -20,7 +20,7 @@ LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "button_log.
 
 def trigger_key_moment(button_number):
     """通过 HTTP API 触发关键时刻"""
-    ports = [8082, 8080]  # Try 8082 (multicam) first, then 8080 (default)
+    ports = [8083, 8080]  # Try 8083 (multicam) first, then 8080 (default)
     data = {
         "note": f"Button {button_number} Pressed"
     }

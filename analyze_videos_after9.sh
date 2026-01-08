@@ -6,7 +6,7 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 VIDEO_ROOT="${VIDEO_ROOT:-"$PROJECT_ROOT/integrated_data/key_moments"}"
-PORT="${PORT:-8082}"
+PORT="${PORT:-8083}"
 TARGET_DATE="${TARGET_DATE:-$(date +%F)}"   # yyyy-mm-dd
 AFTER_TIME="${AFTER_TIME:-09:00}"           # HH:MM, 24h
 VENV_PATH="${VENV_PATH:-$PROJECT_ROOT/.venv/bin/activate}"

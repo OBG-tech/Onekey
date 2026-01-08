@@ -45,9 +45,9 @@ fi
 # Cleanup old processes
 echo -e "${BLUE}🧹 检查残留进程...${NC}"
 
-# 清理占用关键端口的进程 (8082: Web Viewer, 8084: Integrated System)
-echo -e "${YELLOW}⚠️  正在清理端口 8082 和 8084...${NC}"
-fuser -k 8082/tcp > /dev/null 2>&1
+# 清理占用关键端口的进程 (8083: Web Viewer, 8084: Integrated System)
+echo -e "${YELLOW}⚠️  正在清理端口 8083 和 8084...${NC}"
+fuser -k 8083/tcp > /dev/null 2>&1
 fuser -k 8084/tcp > /dev/null 2>&1
 sleep 1
 
@@ -77,7 +77,7 @@ CAMERAS="${CAMERAS:-$DEFAULT_CAMS}"
 # User requested 1920x1080 @ 60fps
 FPS="${FPS:-60}"
 RESOLUTION="${RESOLUTION:-1920x1080}"
-PORT="${PORT:-8082}"
+PORT="${PORT:-8083}"
 
 # 交互式模式
 if [ "$1" == "--interactive" ] || [ "$1" == "-i" ]; then

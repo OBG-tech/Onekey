@@ -81,9 +81,6 @@ class KeyMoment:
     # LLM 元信息
     llm_provider: str = ""           # qwen | claude
     llm_model: str = ""              # 实际调用的模型（此处多为 vision_model）
-
-    # Debug info (optional)
-    last_error: str = ""             # 最近一次 AI/ASR 失败的错误信息（便于 UI 排查）
     
     # 场景信息
     person_count: int = 0            # 当前画面人数
@@ -123,77 +120,6 @@ class KeyMoment:
 
 class KeyMomentsManager:
     """鍙岃建鍏抽敭鏃跺埢绠＄悊鍣?"""
-
-    def _try_load_env_file(self) -> None:
-        """Best-effort load env vars from `.env.local`/`.env`.
-
-        Why: In many runs, the start scripts don't `export` API keys into the process
-        environment, but a `.env.local` exists (used by tests). If the key isn't loaded,
-        the AI summary path always falls back to `[AI Analysis Failed]`.
-        """
-        # already have a key -> nothing to do
-        if (os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_API_KEY")):
-            return
-
-        # 1) prefer python-dotenv if installed
-        try:
-            from dotenv import load_dotenv  # type: ignore
-
-            root = Path(__file__).parent
-            for name in (".env.local", ".env"):
-                p = root / name
-                if p.exists():
-                    load_dotenv(dotenv_path=p, override=False)
-                    break
-            return
-        except Exception:
-            pass
-
-        # 2) minimal parser (KEY=VALUE, ignore comments)
-        root = Path(__file__).parent
-        for name in (".env.local", ".env"):
-            p = root / name
-            if not p.exists():
-                continue
-            try:
-                for raw in p.read_text(encoding="utf-8").splitlines():
-                    line = raw.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    k, v = line.split("=", 1)
-                    k = k.strip()
-                    v = v.strip().strip('"').strip("'")
-                    if k and v and k not in os.environ:
-                        os.environ[k] = v
-            except Exception:
-                continue
-            break
-
-    def _normalize_qwen_text_model(self, model_name: str) -> str:
-        """Guardrail for DashScope(OpenAI-compatible) usage.
-
-        Users sometimes export `LLM_MODEL=gpt-*` from other experiments. DashScope will
-        return 404 for unknown models, which then looks like a generic "AI Analysis Failed".
-        """
-        m = (model_name or "").strip()
-        if not m:
-            return "qwen-max"
-        low = m.lower()
-        # allow common qwen text models
-        if low.startswith("qwen"):
-            return m
-        # known bad / other vendors
-        return "qwen-max"
-
-    def _normalize_qwen_vision_model(self, model_name: str) -> str:
-        m = (model_name or "").strip()
-        if not m:
-            return "qwen-vl-max-latest"
-        low = m.lower()
-        if low.startswith("qwen-vl"):
-            return m
-        # if user put a text model into vision slot, or gpt/claude/anything else
-        return "qwen-vl-max-latest"
     
     def __init__(self, data_dir: Path = None, api_key: str = None,
                  video_source: str = None, audio_source: str = None, microphone_recorder=None,
@@ -214,24 +140,14 @@ class KeyMomentsManager:
         
         # 楹﹀厠椋庡綍鍒跺櫒
         self.microphone_recorder = microphone_recorder
-
-        # API 配置 (LLM provider: qwen | claude)
-        # 兼容：如果用户把 key 写在 `.env.local` 里，但不是通过 shell 导出环境变量，
-        # 这里尝试自动加载（不强依赖 python-dotenv）。
-        self._try_load_env_file()
+        
+        # API 閰嶇疆 (LLM provider: qwen | claude)
         self.dashscope_api_key = api_key or os.environ.get("DASHSCOPE_API_KEY", "")
         self.claude_api_key = os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("CLAUDE_API_KEY", "")
         self.llm_provider = os.environ.get("LLM_PROVIDER", "qwen").lower()
         self.text_model = os.environ.get("LLM_MODEL") or ("claude-3-5-haiku-20241022" if self.llm_provider.startswith("claude") else "qwen-max")
         self.vision_model_fast = os.environ.get("VISION_MODEL_FAST") or ("claude-3-5-haiku-20241022" if self.llm_provider.startswith("claude") else "qwen-vl-plus")
         self.vision_model = os.environ.get("VISION_MODEL") or ("claude-3-5-haiku-20241022" if self.llm_provider.startswith("claude") else "qwen-vl-max-latest")
-
-        # 修复：防止用户把不属于 DashScope 的模型名（例如 gpt-*）写进环境变量，导致 404
-        # 对 qwen provider 强制校验/回退到已知可用的 qwen 模型。
-        if not self.llm_provider.startswith("claude"):
-            self.text_model = self._normalize_qwen_text_model(self.text_model)
-            self.vision_model_fast = self._normalize_qwen_vision_model(self.vision_model_fast)
-            self.vision_model = self._normalize_qwen_vision_model(self.vision_model)
 
         # FireRedASR 妯″瀷缂撳瓨锛堝叧閿?鏃跺埢杞?鍐欎細棰戠箒瑙﹀彂锛涢伩鍏嶆瘡娆? from_pretrained 瀵艰嚧鍗￠】/楂樺欢杩燂級
         self._fireredasr_lock = threading.Lock()
@@ -361,14 +277,10 @@ class KeyMomentsManager:
                     if not m.ai_tags or len(m.ai_tags) == 0:
                         import re
                         text_for_tags = m.ai_tagline or m.ai_description or m.transcript or ""
-                        # 移除 emoji：使用稳定的 Unicode 范围，避免历史乱码导致 `bad character range`
-                        try:
-                            clean_text = re.sub(r'[\U00010000-\U0010ffff]', '', text_for_tags)
-                        except re.error:
-                            # 极端情况下（某些窄字符构建），降级为原始文本
-                            clean_text = text_for_tags
-                        # 按标点和空格切分
-                        clean_text = re.sub(r'[，。！？、：“”‘’（）【】\s]+', '|', clean_text)
+                        # 绉婚櫎emoji
+                        clean_text = re.sub(r'[馃榾-馃檹馃拃-馃浛馃巰-馃徔馃悁-馃?筐煂�-馃椏鈿�-鉀库渶-鉃縘', '', text_for_tags)
+                        # 鎸夋爣鐐瑰拰绌烘牸鍒嗗壊
+                        clean_text = re.sub(r'[锛屻�傦紒锛熴�侊細锛?""''锛堬級銆愩�慭s]+', '|', clean_text)
                         words = [w.strip() for w in clean_text.split('|') if w.strip()]
                         
                         # 杩囨护锛氬彧淇濈暀2-8瀛楃殑鐭?璇?
@@ -970,8 +882,7 @@ class KeyMomentsManager:
             end_ts = center_timestamp + window_after
             
             filtered_frames = [f for f in clip_frames if start_ts <= f[2] <= end_ts]
-            # 修复 f-string 乱码导致的 SyntaxError
-            print(f"   🎞️ [视频帧筛选] 原始帧数: {len(clip_frames)}, 筛选后: {len(filtered_frames)}, 窗口: 前{window_before}s + 后{window_after}s = {window_before + window_after}s")
+            print(f"   馃攳 [瑙嗛?戝抚绛涢�塢 鍘熷?嬪抚鏁?: {len(clip_frames)}, 绛涢�夊悗: {len(filtered_frames)}, 绐楀彛: 鍓峽window_before}s + 鍚巤window_after}s = {window_before + window_after}s")
             if filtered_frames:
                 clip_frames = filtered_frames
             else:
@@ -1018,8 +929,8 @@ class KeyMomentsManager:
             process.wait(timeout=30)
 
             if video_path.exists() and video_path.stat().st_size > 1000:
-                print(f"   💾 视频片段已保存(切片帧): {video_filename} ({len(clip_frames)}帧, {video_duration:.1f}秒, fps≈{est_fps:.1f})")
-                # 尝试补音频（如果麦克风录制器可用，会按 epoch 对齐截音）
+                print(f"   馃幀 瑙嗛?戠墖娈靛凡淇濆瓨(鍒囩墖甯?): {video_filename} ({len(clip_frames)}甯?, {video_duration:.1f}绉?, fps鈮坽est_fps:.1f})")
+                # 灏濊瘯琛ラ煶棰戯紙濡傛灉楹﹀厠椋庡綍鍒跺櫒鍙?鐢?锛屼細鎸? epoch 瀵归綈鎴?闊筹級
                 try:
                     self._add_audio_to_video(moment_id, str(video_path), frame_number, float(video_duration), frame)
                 except Exception:
@@ -1847,9 +1758,7 @@ class KeyMomentsManager:
                 )
                 
                 if video_path:
-                    print(f"   💾 初始视频已生成 (前{KEY_MOMENT_BEFORE_SECONDS:.0f}秒): {video_duration:.1f}秒")
-                    moment.video_path = video_path
-                    moment.video_duration = video_duration
+                    print(f"   馃幀 鍒濆?嬭?嗛?戝凡鐢熸垚 (鍓峽KEY_MOMENT_BEFORE_SECONDS:.0f}绉?): {video_duration:.1f}绉?")
                     moment.video_path = video_path
                     moment.video_duration = video_duration
                     self._save_moments() # 鏇存柊瑙嗛?戣矾寰?
@@ -1972,7 +1881,7 @@ class KeyMomentsManager:
                     break
             
             self._save_moments()
-            print(f"   ✅ 完整视频已生成: {video_duration:.1f}秒 (前{before_s:.0f}秒 + 后{after_s:.0f}秒)")
+            print(f"   鉁? 瀹屾暣瑙嗛?戝凡鐢熸垚: {video_duration:.1f}绉? (鍓峽before_s:.0f}绉? + 鍚巤after_s:.0f}绉?)")
             
             # 馃攰 涓哄畬鏁磋?嗛?戞坊鍔犻煶棰戯紝骞跺湪瀹屾垚鍚庤Е鍙戣??闊宠浆鏂囧瓧+AI鍒嗘瀽
             if moment_frame_number is not None:
@@ -2315,11 +2224,11 @@ class KeyMomentsManager:
         print(f"   鉁? [AI瑙嗛?慮 寤惰繜绾跨▼宸插惎鍔? (thread_id={extend_thread.ident}, moment_id={moment_id})")
         
         print(f"馃?? AI 璇嗗埆鍏抽敭鏃跺埢: {time_str}")
-        print(f"   📝 {description[:60]}...")
-        print(f"   🏷️ 标签: {', '.join(tags[:3])}")
-        print(f"   ⭐ 重要性: {importance:.2f}")
-        print(f"   🎞️ 视频 (前{KEY_MOMENT_BEFORE_SECONDS:.0f}秒): {video_duration:.1f}秒")
-        print(f"   ⏳ {KEY_MOMENT_AFTER_SECONDS:.0f}秒后将生成完整视频并进行AI分析...")
+        print(f"   馃摑 {description[:60]}...")
+        print(f"   馃彿锔? 鏍囩??: {', '.join(tags[:3])}")
+        print(f"   猸? 閲嶈?佹�?: {importance:.2f}")
+        print(f"   馃幀 瑙嗛?? (鍓峽KEY_MOMENT_BEFORE_SECONDS:.0f}绉?): {video_duration:.1f}绉?")
+        print(f"   鈴? {KEY_MOMENT_AFTER_SECONDS:.0f}绉掑悗灏嗙敓鎴愬畬鏁磋?嗛?戝苟杩涜?孉I鍒嗘瀽...")
     
     def _process_video_with_multimodal_analysis(self, moment_id: str, video_path: str, frame=None):
         """浠庡畬鏁磋?嗛?戜腑鎻愬彇闊抽?戝苟杩涜?岃??闊宠浆鏂囧瓧锛岀劧鍚庤繘琛屽?氭ā鎬丄I鍒嗘瀽
@@ -3457,15 +3366,10 @@ R0-R3: Fleck鍜孎itzpatrick(2010)鍙嶆�濆眰绾?
             text_for_tags = tagline or description or transcript or ""
             # 鏀硅繘鐨勫垎璇嶏細鎸夋爣鐐圭?﹀彿鍒嗗壊锛屾彁鍙栫煭璇?
             import re
-            # 移除emoji (修复乱码range)
-            try:
-                # 匹配常见Emoji范围
-                clean_text = re.sub(r'[\U00010000-\U0010ffff]', '', text_for_tags)
-            except:
-                clean_text = text_for_tags
-            
-            # 按标点和空格分割
-            clean_text = re.sub(r'[，。！？、：“”‘’（）【】\s]+', '|', clean_text)
+            # 绉婚櫎emoji
+            clean_text = re.sub(r'[馃榾-馃檹馃拃-馃浛馃巰-馃徔馃悁-馃?筐煂�-馃椏鈿�-鉀库渶-鉃縘', '', text_for_tags)
+            # 鎸夋爣鐐瑰拰绌烘牸鍒嗗壊
+            clean_text = re.sub(r'[锛屻�傦紒锛熴�侊細锛?""''锛堬級銆愩�慭s]+', '|', clean_text)
             words = [w.strip() for w in clean_text.split('|') if w.strip()]
             
             # 杩囨护锛氬彧淇濈暀2-8瀛楃殑鐭?璇?锛屾帓闄ゅ父瑙佽瘝
@@ -3521,12 +3425,12 @@ R0-R3: Fleck鍜孎itzpatrick(2010)鍙嶆�濆眰绾?
             moment.video_path = video_path
             moment.video_duration = video_duration
             self._save_moments()
-            print(f"   ✅ 完整视频已生成: {video_duration:.1f}秒 (前{before_s:.0f}秒 + 后{after_s:.0f}秒)")
+            print(f"   鉁? 瀹屾暣瑙嗛?戝凡鐢熸垚: {video_duration:.1f}绉? (鍓峽before_s:.0f}s + 鍚巤after_s:.0f}s)")
         else:
             print(f"   鈿狅笍  瑙嗛?戠敓鎴愬け璐?")
         
         moment_type = ai_result.get("moment_type", "unknown")
-        print(f"馃帐馃摲 澶氭ā鎬佸叧閿?鏃跺埢: {time_str} [{moment_type}]")
+        print(f"馃帳馃摲 澶氭ā鎬佸叧閿?鏃跺埢: {time_str} [{moment_type}]")
         print(f"   馃摑 {description}")
         if ai_result.get("meeting_note"):
             print(f"   馃搵 绾?瑕?: {ai_result['meeting_note']}")
@@ -4000,22 +3904,22 @@ R0-R3: Fleck鍜孎itzpatrick(2010)鍙嶆�濆眰绾?
             })
 
         system = (
-            "你是一个严谨的协作分析助手。\n"
-            "任务：基于给定的关键时刻卡片内容，找出不同时刻之间的可解释联系（Linkography）。\n"
-            "必须遵守：1) 只能引用输入字段，不得编造；2) 如果证据不足，就不连边；3) 输出必须是严格 JSON（不要代码块、不要额外文字）。\n"
-            "边类型建议：same_topic, follow_up, cause_effect, supports, contradicts, decision_related。"
+            "浣犳槸涓�涓?涓ヨ皑鐨勫崗浣滃垎鏋愬姪鎵嬨�俓n"
+            "浠诲姟锛氬熀浜庣粰瀹氱殑鍏抽敭鏃跺埢鍗＄墖鍐呭?癸紝鎵惧嚭涓嶅悓鏃跺埢涔嬮棿鐨勫彲瑙ｉ噴鑱旂郴锛圠inkography锛夈�俓n"
+            "蹇呴』閬靛畧锛?1) 鍙?鑳藉紩鐢ㄨ緭鍏ュ瓧娈碉紝涓嶅緱缂栭�狅紱2) 濡傛灉璇佹嵁涓嶈冻锛屽氨涓嶈繛杈癸紱3) 杈撳嚭蹇呴』鏄?涓ユ牸 JSON锛堜笉瑕佷唬鐮佸潡銆佷笉瑕侀?濆?栨枃瀛楋級銆俓n"
+            "杈圭被鍨嬪缓璁?锛歴ame_topic, follow_up, cause_effect, supports, contradicts, decision_related銆?"
         )
 
         prompt = (
-            "给你一组 moments（按时间排序）。请输出一个 JSON 对象：\n"
+            "缁欎綘涓�缁? moments锛堟寜鏃堕棿鎺掑簭锛夈�傝?疯緭鍑轰竴涓? JSON 瀵硅薄锛歕n"
             "{\n"
             "  \"nodes\": [{\"id\":\"...\",\"t\":1700000000.0,\"label\":\"...\"}],\n"
-            "  \"edges\": [{\"source\":\"id1\",\"target\":\"id2\",\"type\":\"same_topic\",\"reason\":\"<=20字\"}]\n"
+            "  \"edges\": [{\"source\":\"id1\",\"target\":\"id2\",\"type\":\"same_topic\",\"reason\":\"<=20瀛梊"}]\n"
             "}\n"
-            "要求：\n"
-            "- nodes 必须覆盖所有输入 id；label 用中文短语概括（<=16字）。\n"
-            "- edges 最多 60 条，连接明确相关或可能相关的关系；reason 必须短且可从输入中推断。\n"
-            "- 不要使用不存在的 id。\n\n"
+            "瑕佹眰锛歕n"
+            "- nodes 蹇呴』瑕嗙洊鎵�鏈夎緭鍏? id锛沴abel 鐢ㄤ腑鏂囩煭璇?姒傛嫭锛?<=16瀛楋級銆俓n"
+            "- edges 鏈�澶? 60 鏉★紝杩炴帴鏄庣‘鐩稿叧鎴栧彲鑳界浉鍏崇殑鍏崇郴锛況eason 蹇呴』鐭?涓斿彲浠庤緭鍏ヤ腑鎺ㄦ柇銆俓n"
+            "- 涓嶈?佷娇鐢ㄤ笉瀛樺湪鐨? id銆俓n\n"
             + json.dumps(items, ensure_ascii=False, indent=2)
         )
 

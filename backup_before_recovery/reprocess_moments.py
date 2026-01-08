@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-���´���ȱʧAI�����Ĺؼ�ʱ��
+重新处理缺失AI分析的关键时刻
 
-�÷�: python3 reprocess_moments.py [--dry-run]
+用法: python3 reprocess_moments.py [--dry-run]
 
-����:
-1. ��ȡ moments.json
-2. �ҳ���ͼƬ��ȱ�� AI ������ moments
-3. ��ÿ�� moment ���� AI ����
-4. ���� moments.json
+功能:
+1. 读取 moments.json
+2. 找出有图片但缺少 AI 分析的 moments
+3. 对每个 moment 调用 AI 分析
+4. 更新 moments.json
 """
 
 import os
@@ -20,12 +20,12 @@ import time
 from pathlib import Path
 from datetime import datetime
 
-# ���ػ�������
+# 加载环境变量
 try:
     from dotenv import load_dotenv
     load_dotenv('.env.local')
 except ImportError:
-    # �ֶ����� .env.local
+    # 手动加载 .env.local
     env_file = Path('.env.local')
     if env_file.exists():
         for line in env_file.read_text().splitlines():
@@ -35,84 +35,84 @@ except ImportError:
                 os.environ[key.strip()] = value.strip()
 
 
-# ����Ŀ¼
+# 数据目录
 DATA_DIR = Path("integrated_data/key_moments")
 MOMENTS_FILE = DATA_DIR / "moments.json"
 
-# API����
+# API配置
 API_KEY = os.environ.get("DASHSCOPE_API_KEY", "")
 
 def load_moments():
-    """���� moments.json"""
+    """加载 moments.json"""
     if not MOMENTS_FILE.exists():
-        print(f"�7�4 δ�ҵ� {MOMENTS_FILE}")
+        print(f"❌ 未找到 {MOMENTS_FILE}")
         return None
     
     with open(MOMENTS_FILE, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 def save_moments(data):
-    """���� moments.json"""
+    """保存 moments.json"""
     data['last_updated'] = datetime.now().isoformat()
     with open(MOMENTS_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"�7�3 �ѱ��� {MOMENTS_FILE}")
+    print(f"✅ 已保存 {MOMENTS_FILE}")
 
 def find_missing_ai_moments(data):
-    """�ҳ�ȱ��AI������moments"""
+    """找出缺少AI分析的moments"""
     missing = []
     for m in data.get('moments', []):
         frame_path = m.get('frame_path', '')
         ai_description = m.get('ai_description', '')
         
-        # ��ͼƬ��û��AI����������AI������ռλ��
+        # 有图片但没有AI描述，或者AI描述是占位符
         if frame_path and Path(frame_path).exists():
-            if not ai_description or ai_description in ['', 'AI�����С�', 'AI Processing...', '������...']:
+            if not ai_description or ai_description in ['', 'AI处理中…', 'AI Processing...', '处理中...']:
                 missing.append(m)
     
     return missing
 
 def analyze_moment_with_ai(moment):
-    """ʹ��AI��������moment"""
+    """使用AI分析单个moment"""
     import cv2
     
     frame_path = moment.get('frame_path', '')
     if not frame_path or not Path(frame_path).exists():
-        print(f"  �7�2�1�5 ͼƬ������: {frame_path}")
+        print(f"  ⚠️ 图片不存在: {frame_path}")
         return None
     
-    # ��ȡͼƬ������Ϊbase64
+    # 读取图片并编码为base64
     frame = cv2.imread(frame_path)
     if frame is None:
-        print(f"  �7�2�1�5 �޷���ȡͼƬ: {frame_path}")
+        print(f"  ⚠️ 无法读取图片: {frame_path}")
         return None
     
     _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
     image_base64 = base64.b64encode(buffer).decode('utf-8')
     
-    # ��ȡ������Ϣ
+    # 获取已有信息
     user_note = moment.get('user_note', '') or ''
     transcript = moment.get('transcript', '') or ''
     
-    # ����prompt
-    prompt = f"""����һ��"���ܾ���"���͹ۼ�¼����������/Hackathon�ֳ����������顣
+    # 构建prompt
+    prompt = f"""你是一面"智能镜子"，客观记录创客马拉松/Hackathon现场发生的事情。
 
-����˵�������Ǵ��������� / Hackathon �ֳ�����ԭ�͡�д���롢���ԡ����۷�������
+场景说明：这是创客马拉松 / Hackathon 现场（做原型、写代码、调试、讨论方案）。
 
-����ԭ�� - ���ӹ۲취��
-1) ��ʵ��ӳ������һ���͹����������п���������
-2) ����ɼ�����������Ķ����������Ʒ
-3) �޷�ȷ������˵
+核心原则 - 镜子观察法：
+1) 忠实反映：像镜子一样客观描述画面中看到的内容
+2) 具体可见：描述具体的动作、人物、物品
+3) 无法确定就明说
 
-������ԭ��/��ע��{user_note or "(��)"}
+【按键原因/备注】{user_note or "(无)"}
 
-��ASR�ı���
-{transcript or "(������)"}
+【ASR文本】
+{transcript or "(无语音)"}
 
-�����ʽ��
-��ǩ��<10~14�֣���������+���嶯��/�¼�+0-1���������>
-��ϸ������<2~3�䣬�����������ݺ��������ݣ���������120>
-������ܱ�ǩ��<��"[R2]��֤����"�ȣ��������Կ����Ϊд"�޿�ܱ�ǩ">
+输出格式：
+标签：<10~14字，包含人数+具体动作/事件+0-1个表情符号>
+详细描述：<2~3句，描述画面内容和语音内容，总字数≤120>
+分析框架标签：<如"[R2]论证推理"等，若无明显框架行为写"无框架标签">
 """
     
     try:
@@ -139,15 +139,15 @@ def analyze_moment_with_ai(moment):
             result_text = response.output.choices[0].message.content[0]['text']
             return parse_ai_response(result_text)
         else:
-            print(f"  �7�2�1�5 AI����ʧ��: {response.code} - {response.message}")
+            print(f"  ⚠️ AI调用失败: {response.code} - {response.message}")
             return None
             
     except Exception as e:
-        print(f"  �7�2�1�5 AI�����쳣: {e}")
+        print(f"  ⚠️ AI分析异常: {e}")
         return None
 
 def parse_ai_response(text):
-    """����AI��Ӧ"""
+    """解析AI响应"""
     result = {
         'ai_description': '',
         'ai_tagline': '',
@@ -158,14 +158,14 @@ def parse_ai_response(text):
     lines = text.strip().split('\n')
     for line in lines:
         line = line.strip()
-        if line.startswith('��ǩ��') or line.startswith('��ǩ:'):
-            result['ai_tagline'] = line.split('��', 1)[-1].split(':', 1)[-1].strip()
-        elif line.startswith('��ϸ������') or line.startswith('��ϸ����:'):
-            result['ai_description'] = line.split('��', 1)[-1].split(':', 1)[-1].strip()
-        elif line.startswith('������ܱ�ǩ��') or line.startswith('������ܱ�ǩ:'):
-            result['ai_framework_tags'] = line.split('��', 1)[-1].split(':', 1)[-1].strip()
+        if line.startswith('标签：') or line.startswith('标签:'):
+            result['ai_tagline'] = line.split('：', 1)[-1].split(':', 1)[-1].strip()
+        elif line.startswith('详细描述：') or line.startswith('详细描述:'):
+            result['ai_description'] = line.split('：', 1)[-1].split(':', 1)[-1].strip()
+        elif line.startswith('分析框架标签：') or line.startswith('分析框架标签:'):
+            result['ai_framework_tags'] = line.split('：', 1)[-1].split(':', 1)[-1].strip()
     
-    # ���û����ȡ����ϸ������ʹ�������ı�
+    # 如果没有提取到详细描述，使用完整文本
     if not result['ai_description']:
         result['ai_description'] = text[:100]
     
@@ -175,49 +175,49 @@ def main():
     dry_run = '--dry-run' in sys.argv
     
     print("=" * 60)
-    print("�9�4 ���´���ȱʧAI�����Ĺؼ�ʱ��")
+    print("🔄 重新处理缺失AI分析的关键时刻")
     print("=" * 60)
     
     if not API_KEY:
-        print("�7�4 DASHSCOPE_API_KEY δ����")
-        print("   ���� .env.local ������")
+        print("❌ DASHSCOPE_API_KEY 未设置")
+        print("   请在 .env.local 中配置")
         sys.exit(1)
     
-    # ��������
+    # 加载数据
     data = load_moments()
     if not data:
         sys.exit(1)
     
-    # �ҳ�ȱ��AI������moments
+    # 找出缺少AI分析的moments
     missing = find_missing_ai_moments(data)
     
-    print(f"\n�9�6 ͳ��:")
-    print(f"   - ��moments��: {len(data.get('moments', []))}")
-    print(f"   - ȱ��AI����: {len(missing)}")
+    print(f"\n📊 统计:")
+    print(f"   - 总moments数: {len(data.get('moments', []))}")
+    print(f"   - 缺少AI分析: {len(missing)}")
     
     if not missing:
-        print("\n�7�3 û����Ҫ���´�����moments")
+        print("\n✅ 没有需要重新处理的moments")
         return
     
     if dry_run:
-        print("\n�9�3 Dry-run ģʽ - ֻ��ʾ��Ҫ������moments:")
+        print("\n🔍 Dry-run 模式 - 只显示需要处理的moments:")
         for m in missing:
             print(f"   - {m['id']}: {m.get('user_note', '')[:30]}")
         return
     
-    print(f"\n�0�4 ��ʼ���� {len(missing)} ��moments...\n")
+    print(f"\n🚀 开始处理 {len(missing)} 个moments...\n")
     
     processed = 0
     failed = 0
     
     for i, moment in enumerate(missing, 1):
         moment_id = moment['id']
-        print(f"[{i}/{len(missing)}] ����: {moment_id}")
+        print(f"[{i}/{len(missing)}] 处理: {moment_id}")
         
         result = analyze_moment_with_ai(moment)
         
         if result:
-            # ����moment
+            # 更新moment
             for m in data['moments']:
                 if m['id'] == moment_id:
                     m['ai_description'] = result['ai_description']
@@ -229,23 +229,23 @@ def main():
                     break
             
             processed += 1
-            print(f"  �7�3 �ɹ�: {result['ai_tagline'][:30]}...")
+            print(f"  ✅ 成功: {result['ai_tagline'][:30]}...")
         else:
             failed += 1
-            print(f"  �7�4 ʧ��")
+            print(f"  ❌ 失败")
         
-        # ����API����
+        # 避免API限流
         if i < len(missing):
             time.sleep(1)
     
-    # ������
-    print(f"\n�9�4 ������...")
+    # 保存结果
+    print(f"\n📦 保存结果...")
     save_moments(data)
     
     print(f"\n{'=' * 60}")
-    print(f"�7�3 ���!")
-    print(f"   - �ɹ�����: {processed}")
-    print(f"   - ʧ��: {failed}")
+    print(f"✅ 完成!")
+    print(f"   - 成功处理: {processed}")
+    print(f"   - 失败: {failed}")
     print(f"{'=' * 60}")
 
 if __name__ == "__main__":

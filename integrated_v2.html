@@ -774,7 +774,7 @@
     </style>
 </head>
 
-<body data-lang="zh">
+<body data-lang="en">
     <!-- 顶部导航 -->
     <nav class="navbar">
         <div class="navbar-brand">
@@ -984,7 +984,8 @@
         let asrDuration = 0;
         let asrTimer = null;
         let notesUpdateInterval = null;
-        let currentLanguage = 'zh';
+        // currentLanguage
+        let currentLanguage = 'en';
         let transcriptText = '';
 
         // ============================================================
@@ -1338,11 +1339,65 @@
             }
         }
 
-        function clearTranscript() {
-            document.getElementById('transcript-content').innerHTML =
-                '<div style="color: var(--text-muted);">已清空</div>';
-            transcriptText = '';
-            document.getElementById('word-count').textContent = 0;
+        let lastSegmentCount = -1;
+
+        // Poll ASR state every 2s to synchronize Record button across browsers
+        // Also synchronizes transcript content if changed (e.g. cleared or new history on load)
+        async function pollASRState() {
+            try {
+                const res = await fetch('/api/realtime_asr/state');
+                const data = await res.json();
+                if (data && data.success) {
+                    const running = !!data.running;
+                    const count = (typeof data.segment_count === 'number') ? data.segment_count : 0;
+
+                    // 1. Sync Button State
+                    if (running !== isASRRunning) {
+                        isASRRunning = running;
+                        const btn = document.getElementById('asr-btn');
+                        const dot = document.getElementById('asr-dot');
+                        if (isASRRunning) {
+                            btn.innerHTML = '⏹️ <span class="zh">停止</span><span class="en">Stop</span>';
+                            btn.style.background = 'var(--accent-red)';
+                            dot.classList.add('active');
+                            if (!asrTimer) asrTimer = setInterval(updateTranscript, 1000);
+                            try { startMeetingNotes(); } catch (e) {}
+                        } else {
+                            btn.innerHTML = '🎙️ <span class="zh">开始录音</span><span class="en">Start</span>';
+                            btn.style.background = '';
+                            dot.classList.remove('active');
+                            if (asrTimer) { clearInterval(asrTimer); asrTimer = null; }
+                            if (notesUpdateInterval) { clearInterval(notesUpdateInterval); notesUpdateInterval = null; }
+                        }
+                    }
+
+                    // 2. Sync Content (if segment count changed)
+                    // This handles initial load, clearing, or updates when not recording locally
+                    if (count !== lastSegmentCount) {
+                        lastSegmentCount = count;
+                        updateTranscript(); 
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        pollASRState();
+        setInterval(pollASRState, 2000);
+
+        async function clearTranscript() {
+            try {
+                await fetch('/api/realtime_asr/clear', { method: 'POST' });
+                // Local update will happen via pollASRState detection of segment_count=0
+                // But we can also update immediately for responsiveness
+                document.getElementById('transcript-content').innerHTML =
+                    '<div style="color: var(--text-muted);">已清空</div>';
+                transcriptText = '';
+                document.getElementById('word-count').textContent = 0;
+            } catch (e) {
+                console.error(e);
+            }
         }
 
         // ============================================================

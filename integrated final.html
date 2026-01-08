@@ -3778,9 +3778,9 @@
                         grid.innerHTML = `
                             <div class="empty-state" style="width:100%; text-align:center; padding: 20px;">
                                 <div style="font-size: 48px; margin-bottom: 8px;">🎯</div>
-                                <div style="color:#666;">暂无关键时刻</div>
+                                <div style="color:#666;">No Key Moments Yet</div>
                                 <div style="font-size:11px; color:#999; margin-top: 4px;">
-                                    按下红色按钮标记重要时刻，或等待 AI 每2分钟自动识别
+                                    Press the red button to mark important moments, or wait for AI auto-detection (approx. every 3.5 mins)
                                 </div>
                             </div>
                         `;
@@ -5199,7 +5199,7 @@
         let lastSegmentCount = 0;
 
         async function pollRealtimeTranscript() {
-            if (!isRecording) return;
+            // if (!isRecording) return; // Allow manual calls for sync
 
             try {
                 const response = await fetch('/api/realtime_asr/transcript');
@@ -5207,37 +5207,41 @@
 
                 if (!data.success) return;
 
-                // 显示完整的累积转录内容 (带时间标签)
                 const container = document.getElementById('transcript-content');
+                const realtimeEl = document.getElementById('transcript-realtime');
 
                 if (data.transcript && data.transcript.trim()) {
-                    // 有完整转录内容,直接显示
                     transcriptText = data.transcript;
                     container.innerHTML = transcriptText.replace(/\n/g, '<br>');
-
-                    // 如果还有正在识别的临时文本,追加显示
-                    const realtimeEl = document.getElementById('transcript-realtime');
+                    
                     if (data.current_text && data.current_text.trim()) {
                         realtimeEl.textContent = '🔄 ' + data.current_text;
                     } else {
                         realtimeEl.textContent = '';
                     }
-                } else if (data.current_text && data.current_text.trim()) {
-                    // 只有临时文本,没有完整记录
-                    const realtimeEl = document.getElementById('transcript-realtime');
-                    realtimeEl.textContent = '🔄 ' + data.current_text;
                 } else {
-                    // 正在录制但还没有任何内容
-                    if (!container.innerHTML || container.innerHTML.includes('点击"开始录音"')) {
-                        container.innerHTML = `<span style="color: #999; font-style: italic;">正在监听,请说话... (片段数: ${data.segment_count || 0})</span>`;
+                    // Empty transcript
+                    transcriptText = '';
+                    
+                    if (data.current_text && data.current_text.trim()) {
+                        container.innerHTML = ''; // Start clean if only realtime text
+                        realtimeEl.textContent = '🔄 ' + data.current_text;
+                    } else {
+                        realtimeEl.textContent = '';
+                        // If segment count is 0, it means it's cleared or empty
+                        if ((data.segment_count || 0) === 0) {
+                             container.innerHTML = '<span style="color: #999; font-style: italic;">点击"开始录音"按钮...</span>';
+                        } else {
+                             container.innerHTML = `<span style="color: #999; font-style: italic;">正在监听... (${data.segment_count})</span>`;
+                        }
                     }
                 }
 
-                // 自动滚动到底部
-                container.parentElement.scrollTop = container.parentElement.scrollHeight;
+                // Scroll
+                if (container.parentElement) container.parentElement.scrollTop = container.parentElement.scrollHeight;
 
-                // 更新字数统计
-                document.getElementById('transcript-word-count').textContent = (data.transcript || '').length;
+                // Stats
+                document.getElementById('transcript-word-count').textContent = (transcriptText || '').length;
 
             } catch (error) {
                 console.error('获取转写结果失败:', error);
@@ -6355,6 +6359,56 @@
         })();
 
     </script>
+
+    <script>
+    // Poll backend ASR state to synchronize Record button across clients
+    let localSegmentCountSync = -1;
+
+    async function pollASRState_final() {
+        try {
+            const res = await fetch('/api/realtime_asr/state');
+            const data = await res.json();
+            if (data && data.success) {
+                const running = !!data.running;
+                const count = (typeof data.segment_count === 'number') ? data.segment_count : 0;
+
+                // Sync UI
+                if (running !== isRecording) {
+                    isRecording = running;
+                    const btn = document.getElementById('asr-start-btn');
+                    const indicator = document.getElementById('asr-indicator');
+                    const statusText = document.getElementById('asr-status-text');
+                    if (isRecording) {
+                        btn.innerHTML = '⏹️ Stop';
+                        btn.style.background = 'linear-gradient(145deg, #e74c3c, #c0392b)';
+                        if (indicator) { indicator.style.background = '#27ae60'; indicator.style.animation = 'pulse 1s infinite'; }
+                        if (statusText) statusText.textContent = 'Recording...';
+                        if (!asrDurationInterval) asrDurationInterval = setInterval(updateASRDuration, 1000);
+                        if (!realtimeASRPollInterval) realtimeASRPollInterval = setInterval(pollRealtimeTranscript, 2000);
+                    } else {
+                        btn.innerHTML = '🎙️ Record';
+                        btn.style.background = 'linear-gradient(145deg, #27ae60, #1e8449)';
+                        if (indicator) { indicator.style.background = ''; indicator.style.animation = ''; }
+                        if (statusText) statusText.textContent = '';
+                        if (asrDurationInterval) { clearInterval(asrDurationInterval); asrDurationInterval = null; }
+                        if (realtimeASRPollInterval) { clearInterval(realtimeASRPollInterval); realtimeASRPollInterval = null; }
+                    }
+                }
+
+                // Sync Content if changed (e.g. Cleared, or new content on load)
+                if (count !== localSegmentCountSync) {
+                    localSegmentCountSync = count;
+                    pollRealtimeTranscript();
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+    }
+    pollASRState_final();
+    setInterval(pollASRState_final, 2000);
+    </script>
+
 </body>
 
 </html>
