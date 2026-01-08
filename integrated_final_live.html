@@ -2454,7 +2454,7 @@
                         </div>
                     </div>
 
-                    <!-- 下层: 📝 AI 会议纪要 -->
+                    <!-- Lower: 📝 AI Meeting Notes -->
                     <div id="notes-panel" data-module-id="notes" style="flex: 1; background: #fff; 
                                     border: 2px solid #333; border-top: none;
                                     display: flex; flex-direction: column; overflow: hidden;">
@@ -2493,8 +2493,7 @@
                                     <div style="font-size: 32px; margin-bottom: 8px;">📋</div>
                                     <div style="font-size: 13px; font-weight: bold; color: #333;">AI Meeting
                                         Notes</div>
-                                    <div style="font-size: 11px; margin-top: 4px;">Auto-generated from speech
-                                    </div>
+                                        <div style="font-size: 11px; margin-top: 4px;">Auto-generated from speech</div>
                                 </div>
                             </div>
                         </div>
@@ -5255,11 +5254,11 @@
                 '<div style="color: #999; font-style: italic; text-align: center;">' +
                 '<div style="font-size: 24px; margin-bottom: 8px;">📋</div>' +
                 'AI will automatically generate meeting notes based on speech content<br>' +
-                '<span style="font-size: 11px;">Automatically updated every 30 seconds</span></div>';
+                '<span style="font-size: 11px;">Auto-updated periodically</span></div>';
         }
 
         // ============================================================
-        // 📝 AI 会议纪要功能 (与课堂录制助手V1.1逻辑一致)
+    // 📝 AI Meeting Notes (compatible with Classroom Recorder V1.1)
         // ============================================================
 
         // 启动会议纪要生成器
@@ -5268,12 +5267,12 @@
                 const res = await fetch('/api/meeting_notes/start', { method: 'POST' });
                 const data = await res.json();
                 if (data.success) {
-                    console.log('✅ 会议纪要生成器已启动');
+                    console.log('✅ Meeting notes generator started');
                     document.getElementById('notes-status-text').textContent = 'Running';
                     document.getElementById('notes-indicator').style.background = '#27ae60';
                 }
             } catch (e) {
-                console.error('启动会议纪要生成失败:', e);
+                console.error('Failed to start meeting notes generator:', e);
             }
         }
 
@@ -5282,14 +5281,14 @@
             try {
                 const res = await fetch('/api/meeting_notes/current');
                 const data = await res.json();
-                if (data.success && (data.summary || data.key_points)) {
+                if (data.success && (data.summary || (data.key_points && data.key_points.length))) {
                     displayMeetingNotesV2(data);
-                    const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-                    document.getElementById('notes-status-text').textContent = `${time} Update`;
+                    const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    document.getElementById('notes-status-text').textContent = `${time} Updated`;
                     document.getElementById('notes-indicator').style.background = '#27ae60';
                 }
             } catch (e) {
-                console.error('更新会议纪要失败:', e);
+                console.error('Meeting notes update failed:', e);
             }
         }
 
@@ -5305,7 +5304,7 @@
 
             if (currentLength < 30) {
                 // 内容太少，不生成
-                document.getElementById('notes-status-text').textContent = '等待更多内容...';
+                document.getElementById('notes-status-text').textContent = 'Waiting for more content...';
                 return;
             }
 
@@ -5329,11 +5328,11 @@
                 if (data && (data.current || data.history)) {
                     displayMeetingNotes(data);
                     document.getElementById('notes-indicator').style.background = '#27ae60';
-                    const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-                    document.getElementById('notes-status-text').textContent = `${time} Update`;
+                    const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    document.getElementById('notes-status-text').textContent = `${time} Updated`;
                 }
             } catch (error) {
-                console.error('获取会议纪要失败:', error);
+                console.error('Meeting notes fetch failed:', error);
                 document.getElementById('notes-indicator').style.background = '#e74c3c';
                 document.getElementById('notes-status-text').textContent = 'Update failed';
             }
@@ -5375,9 +5374,9 @@
                 }
 
             } catch (error) {
-                console.error('生成会议纪要失败:', error);
+                console.error('Meeting notes generation failed:', error);
                 document.getElementById('notes-indicator').style.background = '#e74c3c';
-                document.getElementById('notes-status-text').textContent = '网络错误';
+                document.getElementById('notes-status-text').textContent = 'Network error';
             }
         }
 
@@ -5389,7 +5388,7 @@
                 container.innerHTML = `
                     <div style="text-align: center; padding: 20px; color: #999;">
                         <div style="font-size: 32px; margin-bottom: 8px;">📋</div>
-                        <div>等待内容...</div>
+                        <div>Waiting for content...</div>
                     </div>`;
                 return;
             }
@@ -5399,7 +5398,7 @@
             // 显示摘要
             if (data.summary) {
                 html += `<div style="margin-bottom: 12px; padding: 10px; background: #e8f5e9; border-radius: 6px; border-left: 3px solid #4caf50;">
-                    <div style="font-weight: bold; color: #2e7d32; margin-bottom: 4px;">📝 会议摘要</div>
+                    <div style="font-weight: bold; color: #2e7d32; margin-bottom: 4px;">📝 Summary</div>
                     <div style="font-size: 13px; color: #1b5e20;">${data.summary}</div>
                 </div>`;
             }
@@ -5407,7 +5406,7 @@
             // 显示要点
             if (data.key_points && data.key_points.length > 0) {
                 html += `<div style="margin-bottom: 12px;">
-                    <div style="font-weight: bold; color: #1976d2; margin-bottom: 6px;">📌 核心要点</div>`;
+                    <div style="font-weight: bold; color: #1976d2; margin-bottom: 6px;">📌 Key points</div>`;
                 data.key_points.forEach((point, i) => {
                     html += `<div style="padding: 6px 10px; margin: 4px 0; background: #e3f2fd; border-radius: 4px; font-size: 12px; color: #1565c0;">
                         ${i + 1}. ${point}
@@ -5419,7 +5418,7 @@
             // 显示待办事项
             if (data.action_items && data.action_items.length > 0) {
                 html += `<div>
-                    <div style="font-weight: bold; color: #e65100; margin-bottom: 6px;">✅ 待办事项</div>`;
+                    <div style="font-weight: bold; color: #e65100; margin-bottom: 6px;">✅ Action items</div>`;
                 data.action_items.forEach((item, i) => {
                     html += `<div style="padding: 6px 10px; margin: 4px 0; background: #fff3e0; border-radius: 4px; font-size: 12px; color: #e65100;">
                         ${i + 1}. ${item}
@@ -5504,7 +5503,7 @@
                             html += `<div style="margin: 2px 0;">• ${pt}</div>`;
                         });
                         if (h.key_points.length > 2) {
-                            html += `<div style="color: #999; font-style: italic;">...还有${h.key_points.length - 2}条</div>`;
+                            html += `<div style="color: #999; font-style: italic;">...and ${h.key_points.length - 2} more</div>`;
                         }
                         html += `</div>`;
                     }
@@ -5528,7 +5527,7 @@
             // 核心要点（简洁列表）
             if (notes.key_points && notes.key_points.length > 0) {
                 html += `<div style="margin-bottom: 10px;">
-                    <div style="font-weight: bold; color: #1976d2; font-size: 12px; margin-bottom: 6px;">📌 核心要点</div>`;
+                    <div style="font-weight: bold; color: #1976d2; font-size: 12px; margin-bottom: 6px;">📌 Key points</div>`;
                 notes.key_points.forEach((point, i) => {
                     html += `<div style="padding: 4px 8px; margin: 3px 0; background: #e3f2fd; border-radius: 4px; 
                                 font-size: 12px; color: #1565c0;">${i + 1}. ${point}</div>`;
@@ -5540,7 +5539,7 @@
             if (notes.action_items && notes.action_items.length > 0 &&
                 !(notes.action_items.length === 1 && !notes.action_items[0])) {
                 html += `<div style="margin-bottom: 10px;">
-                    <div style="font-weight: bold; color: #e65100; font-size: 12px; margin-bottom: 6px;">✅ 待办</div>`;
+                    <div style="font-weight: bold; color: #e65100; font-size: 12px; margin-bottom: 6px;">✅ Action items</div>`;
                 notes.action_items.forEach(item => {
                     const text = typeof item === 'object' ? item.item : item;
                     if (text) {
@@ -5555,7 +5554,7 @@
             if (notes.decisions && notes.decisions.length > 0 &&
                 !(notes.decisions.length === 1 && !notes.decisions[0])) {
                 html += `<div style="margin-bottom: 10px;">
-                    <div style="font-weight: bold; color: #7b1fa2; font-size: 12px; margin-bottom: 6px;">🔔 决策</div>`;
+                    <div style="font-weight: bold; color: #7b1fa2; font-size: 12px; margin-bottom: 6px;">🔔 Decisions</div>`;
                 notes.decisions.forEach(decision => {
                     if (decision) {
                         html += `<div style="padding: 4px 8px; margin: 3px 0; background: #f3e5f5; border-radius: 4px; 
@@ -5568,7 +5567,7 @@
             if (!html) {
                 html = `<div style="color: #666; text-align: center; padding: 20px;">
                     <div style="font-size: 28px; margin-bottom: 8px;">📝</div>
-                    <div style="font-size: 12px;">等待内容生成...</div>
+                    <div style="font-size: 12px;">Waiting for notes...</div>
                 </div>`;
             }
 

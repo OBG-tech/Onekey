@@ -1334,7 +1334,7 @@
                         dot.classList.add('active');
                         asrTimer = setInterval(updateTranscript, 1000);
 
-                        // 同时启动会议纪要生成
+                        // Start meeting notes generation as well
                         startMeetingNotes();
                     } else {
                         alert('启动失败: ' + (data.error || '未知错误'));
@@ -1417,11 +1417,11 @@
                 const data = await res.json();
 
                 if (data.success) {
-                    // 启动定时更新会议纪要
+                    // Start periodic meeting notes updates
                     notesUpdateInterval = setInterval(updateMeetingNotes, 5000);
                 }
             } catch (e) {
-                console.error('启动会议纪要生成失败:', e);
+                console.error('Failed to start meeting notes generation:', e);
             }
         }
 
@@ -1434,7 +1434,7 @@
                     displayNotes(data);
                 }
             } catch (e) {
-                console.error('更新会议纪要失败:', e);
+                console.error('Meeting notes update failed:', e);
             }
         }
 
@@ -1468,7 +1468,7 @@
                 content.innerHTML = `
                     <div class="empty-state">
                         <div class="icon">📋</div>
-                        <div>等待内容...</div>
+                        <div>Waiting for content...</div>
                     </div>`;
                 return;
             }
