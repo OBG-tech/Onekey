@@ -122,12 +122,12 @@ fi
 # 启动完整系统
 echo -e "${GREEN}🚀 启动多摄像头集成系统...${NC}\n"
 
-# 启动 Key Moments Viewer 服务 (端口 8084)
-echo -e "${BLUE}📹 启动 Key Moments Viewer (端口 8084)...${NC}"
-python key_moments_viewer.py > /dev/null 2>&1 &
+# 启动 Key Moments Viewer 服务 (端口 8086)
+echo -e "${BLUE}📹 启动 Key Moments Viewer (端口 8086)...${NC}"
+python key_moments_viewer.py --port 8086 > viewer_service.log 2>&1 &
 MOMENTS_VIEWER_PID=$!
 sleep 1
-echo -e "${GREEN}✅ Key Moments Viewer: http://localhost:8084${NC}\n"
+echo -e "${GREEN}✅ Key Moments Viewer: http://localhost:8086${NC}\n"
 
 # 启动主系统
 python start_multicam_system.py \

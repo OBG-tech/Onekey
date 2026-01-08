@@ -12,6 +12,7 @@ from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 import threading
+import argparse
 
 # 配置
 PORT = 8084
@@ -693,17 +694,22 @@ class MomentsHandler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         print(f"[MomentsViewer] {args[0]}")
 
-
 def run_server():
     """启动服务器"""
-    server = HTTPServer(('0.0.0.0', PORT), MomentsHandler)
+    parser = argparse.ArgumentParser(description='Key Moments Viewer')
+    parser.add_argument('--port', type=int, default=8084, help='Port to run the server on')
+    args = parser.parse_args()
+    
+    server_port = args.port
+    
+    server = HTTPServer(('0.0.0.0', server_port), MomentsHandler)
     print(f"""
 ╔════════════════════════════════════════════════════════╗
 ║   📹 Key Moments Viewer                                ║
 ║   View, download, and share your captured moments      ║
 ╚════════════════════════════════════════════════════════╝
 
-🌐 Server running at: http://localhost:{PORT}
+🌐 Server running at: http://localhost:{server_port}
 📁 Moments directory: {MOMENTS_MEDIA_DIR}
 
 Press Ctrl+C to stop
