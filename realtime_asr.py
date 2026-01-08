@@ -542,7 +542,7 @@ class RealtimeASR:
                 # 创建流式识别对象
                 # 添加语言提示：只识别中文和英文
                 self.recognition = Recognition(
-                    model='paraformer-realtime-v2',
+                    model=os.environ.get("ASR_MODEL_REALTIME", 'paraformer-realtime-v2'),
                     format='pcm',
                     sample_rate=16000,
                     callback=callback,

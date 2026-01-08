@@ -100,12 +100,12 @@ class CommentatorAgent:
             )
             
             response = client.chat.completions.create(
-                model="qwen-max",
+                model=os.environ.get("LLM_MODEL", "qwen-max"),
                 messages=[
                     {"role": "system", "content": self.persona},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.6,  # 降低随机性，更客观
+                temperature=0.6,
                 max_tokens=100
             )
             

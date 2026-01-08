@@ -55,6 +55,10 @@ class MultiCameraCapture:
         self.audio_filename = None
         self.audio_process = None
         
+        # 独立录制线程支持
+        self.latest_frames = [None] * len(camera_indices)
+        self.frame_lock = threading.Lock()
+        
         # 录制时缩小到720p以节省空间
         self.recording_width = 1280
         self.recording_height = 720
@@ -100,6 +104,9 @@ class MultiCameraCapture:
                 fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
                 codec = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
                 
+                # 尝试设置缓冲区大小为1（减少延迟）
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
                 # 获取实际设置
                 actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                 actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -148,7 +155,11 @@ class MultiCameraCapture:
                 if frame.shape[1] != self.resolution[0] or frame.shape[0] != self.resolution[1]:
                     frame = cv2.resize(frame, self.resolution)
                 
-                # 非阻塞放入队列
+                # 更新最新帧（用于录制线程）
+                with self.frame_lock:
+                    self.latest_frames[camera_idx] = frame
+                
+                # 非阻塞放入队列 (用于Main App / Read)
                 try:
                     queue_obj.put(frame, block=False)
                 except queue.Full:
@@ -159,8 +170,8 @@ class MultiCameraCapture:
                     except:
                         pass
             
-            # 控制帧率
-            time.sleep(1.0 / self.target_fps / 2)  # 稍快一点以确保不漏帧
+            # 移除sleep以获得最大帧率 (cap.read本身是阻塞的)
+            # time.sleep(1.0 / self.target_fps / 2)
     
     def start_capture_threads(self):
         """启动所有摄像头的捕获线程"""
@@ -181,6 +192,13 @@ class MultiCameraCapture:
         # 启动录制
         if self.enable_recording:
             self._start_recording()
+            
+            # 启动独立录制线程
+            self.recording_thread = threading.Thread(
+                target=self._recording_worker,
+                daemon=True
+            )
+            self.recording_thread.start()
     
     def get_frames(self) -> List[np.ndarray]:
         """
@@ -255,18 +273,51 @@ class MultiCameraCapture:
         
         stitched = self.stitch_2x2(frames)
         
-        # 录制帧 - 缩小分辨率
-        if self.enable_recording and self.video_writer is not None:
-            # 记录开始时间（第一帧）
-            if self.recording_start_time is None:
-                self.recording_start_time = time.time()
-            
-            # 缩放到录制分辨率
-            recording_frame = cv2.resize(stitched, (self.recording_width, self.recording_height))
-            self.video_writer.write(recording_frame)
-            self.frame_count += 1
+        # 录制逻辑已移至独立线程 _recording_worker
         
         return True, stitched
+    
+    def _recording_worker(self):
+        """独立录制线程，确保固定帧率"""
+        # 录制帧率: 如果目标FPS>=60，则录制60，否则30
+        rec_fps = 60.0 if self.target_fps >= 60 else 30.0
+        target_interval = 1.0 / rec_fps
+        print(f"📼 独立录制线程启动 (Target: {rec_fps:.1f} FPS)")
+        
+        while self.is_running:
+            start_time = time.time()
+            
+            if self.video_writer is not None:
+                # 获取最新帧快照
+                current_frames = []
+                with self.frame_lock:
+                    # 深拷贝或直接引用(如果只是读取拼接)
+                    # 这里为了速度我们引用，stitch函数会handle shape
+                    for f in self.latest_frames:
+                        if f is not None:
+                            current_frames.append(f)
+                        else:
+                            # 占位符
+                            blank = np.zeros((self.resolution[1], self.resolution[0], 3), dtype=np.uint8)
+                            current_frames.append(blank)
+                
+                # 拼接
+                stitched = self.stitch_2x2(current_frames)
+                
+                # 缩放并写入
+                recording_frame = cv2.resize(stitched, (self.recording_width, self.recording_height))
+                self.video_writer.write(recording_frame)
+                
+                # 记录开始时间（第一帧）
+                if self.recording_start_time is None:
+                    self.recording_start_time = time.time()
+                self.frame_count += 1
+            
+            # 精确控制帧率
+            elapsed = time.time() - start_time
+            sleep_time = target_interval - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
     
     def _start_recording(self):
         """开始录制（视频+音频）"""

@@ -13,7 +13,7 @@ from key_moments_manager import KeyMomentsManager, KeyMoment
 # Force set env vars for testing
 os.environ["DASHSCOPE_API_KEY"] = "sk-84c8ffcad83c4718827763555733ff07"
 os.environ["LLM_PROVIDER"] = "qwen"
-os.environ["LLM_MODEL"] = "qwen3-max"
+os.environ["LLM_MODEL"] = "gpt-5.1-codex-max"
 
 def main():
     print("🔥 Initializing KeyMomentsManager...")

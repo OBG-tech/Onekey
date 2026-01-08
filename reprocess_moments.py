@@ -129,7 +129,7 @@ def analyze_moment_with_ai(moment):
         }]
         
         response = MultiModalConversation.call(
-            model='qwen-vl-max-latest',
+            model=os.environ.get("VISION_MODEL", "qwen-vl-max-latest"),
             messages=messages,
             max_tokens=500
         )
@@ -223,8 +223,8 @@ def main():
                     m['ai_tagline'] = result['ai_tagline']
                     m['ai_framework_tags'] = result['ai_framework_tags']
                     m['analysis'] = result['analysis']
-                    m['llm_provider'] = 'qwen'
-                    m['llm_model'] = 'qwen-vl-max-latest'
+                    m['llm_provider'] = os.environ.get("LLM_PROVIDER", "qwen")
+                    m['llm_model'] = os.environ.get("VISION_MODEL", "qwen-vl-max-latest")
                     break
             
             processed += 1

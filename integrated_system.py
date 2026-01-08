@@ -2442,7 +2442,7 @@ def transcribe_audio_with_qwen(audio_path: str) -> str:
             )
             
             response = client.chat.completions.create(
-                model="qwen2-audio-instruct",
+                model=os.environ.get("AUDIO_MODEL", "qwen2-audio-instruct"),
                 messages=[
                     {
                         "role": "user",

@@ -14,8 +14,9 @@ app = Flask(__name__)
 # 配置
 BASE_DIR = Path(__file__).parent
 MOMENTS_DIR = BASE_DIR / "moments_organized"
-QWEN_API_KEY = "sk-84c8ffcad83c4718827763555733ff07"
+QWEN_API_KEY = os.environ.get("DASHSCOPE_API_KEY", "sk-84c8ffcad83c4718827763555733ff07")
 QWEN_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+LLM_MODEL = os.environ.get("LLM_MODEL", "qwen-max")
 
 # 加载 moments 数据
 def load_moments():
@@ -1245,7 +1246,7 @@ def api_summary():
         }
         
         payload = {
-            'model': 'qwen-max',
+            'model': LLM_MODEL,
             'messages': [
                 {'role': 'user', 'content': prompt}
             ],

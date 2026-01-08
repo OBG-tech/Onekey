@@ -44,6 +44,13 @@ fi
 
 # Cleanup old processes
 echo -e "${BLUE}🧹 检查残留进程...${NC}"
+
+# 清理占用关键端口的进程 (8082: Web Viewer, 8084: Integrated System)
+echo -e "${YELLOW}⚠️  正在清理端口 8082 和 8084...${NC}"
+fuser -k 8082/tcp > /dev/null 2>&1
+fuser -k 8084/tcp > /dev/null 2>&1
+sleep 1
+
 old_pids=$(pgrep -f "start_multicam_system.py")
 if [ ! -z "$old_pids" ]; then
     echo -e "${YELLOW}⚠️  清理旧进程 ($old_pids)...${NC}"
