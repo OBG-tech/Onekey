@@ -12,6 +12,7 @@ import os
 import sys
 import json
 import threading
+import queue
 import time
 import argparse
 import webbrowser
@@ -2885,6 +2886,52 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
     
     current_stats["status"] = "running"
 
+    # 初始化 AI 线程相关变量
+    ai_queue = queue.Queue(maxsize=1)  # 仅保留最新一帧
+    ai_result_queue = queue.Queue(maxsize=1)
+    last_ai_results = None
+    
+    def ai_inference_worker():
+        """独立 AI 推理线程"""
+        while is_running and cap.isOpened():
+            try:
+                # 获取最新帧 (阻塞等待)
+                frame_to_process = ai_queue.get(timeout=1.0)
+                
+                # 执行推理
+                results = model.track(
+                    frame_to_process,
+                    persist=True,
+                    conf=0.25,
+                    classes=[0],
+                    verbose=False,
+                    tracker="multi_person_tracker/configs/bytetrack_persistent.yaml"
+                    if Path("multi_person_tracker/configs/bytetrack_persistent.yaml").exists()
+                    else "bytetrack.yaml"
+                )
+                
+                # 将结果放入结果队列 (非阻塞，如果满则丢弃旧的? 不，结果必须取)
+                # 这里我们只保留最新的结果
+                if not ai_result_queue.empty():
+                    try:
+                        ai_result_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                ai_result_queue.put(results)
+                
+                ai_queue.task_done()
+                
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"⚠️ AI线程出错: {e}")
+                time.sleep(0.1)
+
+    # 启动 AI 线程
+    ai_thread = threading.Thread(target=ai_inference_worker, daemon=True)
+    ai_thread.start()
+    print("🚀 AI推理线程已启动 (Decoupled Mode)")
+
     while cap.isOpened() and is_running:
         success, frame = cap.read()
         
@@ -2906,19 +2953,34 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
             fps_start_time = time.time()
             fps_frame_count = 0
         
-        # YOLO追踪
-        results = model.track(
-            frame,
-            persist=True,
-            conf=0.25,
-            classes=[0],
-            verbose=False,
-            tracker="multi_person_tracker/configs/bytetrack_persistent.yaml"
-            if Path("multi_person_tracker/configs/bytetrack_persistent.yaml").exists()
-            else "bytetrack.yaml"
-        )
+        # --- AI 推理调度 ---
+        # 1. 尝试将当前帧放入 AI 队列 (如果队列满，说明AI忙，只更新队列中的帧为最新)
+        try:
+            # 清空队列以确保放入的是最新帧? 
+            # 策略: 如果满，就取出旧的，放入新的
+            if ai_queue.full():
+                try:
+                    ai_queue.get_nowait()
+                except queue.Empty:
+                    pass
+            ai_queue.put(frame, block=False)
+        except queue.Full:
+            pass # 理论上上面清理了，这里不会满
+            
+        # 2. 尝试获取最新的 AI 结果
+        if not ai_result_queue.empty():
+            try:
+                last_ai_results = ai_result_queue.get_nowait()
+            except queue.Empty:
+                pass
         
-        boxes = results[0].boxes
+        # 3. 使用由于结果 (如果没有结果，boxes为None)
+        if last_ai_results:
+            boxes = last_ai_results[0].boxes
+        else:
+            boxes = None
+            
+        # (原有的同步 YOLO 调用已移除)
         person_count = len(boxes) if boxes is not None else 0
         track_ids = boxes.id.int().cpu().tolist() if boxes is not None and boxes.id is not None else []
         
@@ -3642,8 +3704,17 @@ def main():
                 pass
             # macOS 下常见：PyAudio/OpenCV 等 native 资源在解释器收尾时触发 SIGTRAP。
             # 这里做一次“清理后强退”，避免 Trace/BPT trap: 5。
-            if sys.platform == "darwin":
-                os._exit(0)
+            
+            # 关键修改：如果有multicam实例，先释放它！
+            if hasattr(sys, '_multicam_instance'):
+                try:
+                    print("🔄 [Integrated] 正在释放多摄像头实例...")
+                    sys._multicam_instance.release()
+                except Exception as e:
+                    print(f"⚠️ 释放多摄像头实例出错: {e}")
+            
+            # if sys.platform == "darwin":
+            #     os._exit(0)
             return
         
     except Exception as e:

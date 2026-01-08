@@ -232,7 +232,27 @@ class MultiCameraCapture:
         stitched = np.vstack([top_row, bottom_row])
         
         return stitched
-    
+
+    def _recording_thread(self):
+        """后台录制线程，负责缩放和写入磁盘"""
+        while self.is_running or not self.recording_queue.empty():
+            try:
+                frame = self.recording_queue.get(timeout=0.5)
+                if frame is None:
+                    break
+                
+                if self.video_writer is not None:
+                    # 缩放到录制分辨率
+                    recording_frame = cv2.resize(frame, (self.recording_width, self.recording_height))
+                    self.video_writer.write(recording_frame)
+                    self.frame_count += 1
+                
+                self.recording_queue.task_done()
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"⚠️ 录制线程出错: {e}")
+            
     def read(self) -> Tuple[bool, Optional[np.ndarray]]:
         """
         读取拼接后的帧 (兼容cv2.VideoCapture接口)
@@ -247,16 +267,18 @@ class MultiCameraCapture:
         
         stitched = self.stitch_2x2(frames)
         
-        # 录制帧 - 缩小分辨率
+        # 放入录制队列
         if self.enable_recording and self.video_writer is not None:
             # 记录开始时间（第一帧）
             if self.recording_start_time is None:
                 self.recording_start_time = time.time()
             
-            # 缩放到录制分辨率
-            recording_frame = cv2.resize(stitched, (self.recording_width, self.recording_height))
-            self.video_writer.write(recording_frame)
-            self.frame_count += 1
+            # 非阻塞放入，如果队列满则丢弃（优先保住主循环FPS）
+            try:
+                if hasattr(self, 'recording_queue'):
+                    self.recording_queue.put(stitched, block=False)
+            except queue.Full:
+                pass
         
         return True, stitched
     
@@ -269,6 +291,15 @@ class MultiCameraCapture:
         # 重置帧计数
         self.frame_count = 0
         self.recording_start_time = None
+        
+        # 初始化录制队列和线程
+        self.recording_queue = queue.Queue(maxsize=30)  # 缓冲1秒左右
+        self.recording_thread_handle = threading.Thread(
+            target=self._recording_thread,
+            daemon=True
+        )
+        self.recording_thread_handle.start()
+        print("🎬 启动了录制专用线程")
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         # 临时视频文件（无音频，可能FPS不准确）
@@ -343,6 +374,14 @@ class MultiCameraCapture:
                 print(f"📊 录制统计: {self.frame_count} 帧, {recording_duration:.1f} 秒, 实际FPS: {actual_fps:.1f}")
         
         # 1. 停止视频录制
+        # 先等待录制线程结束
+        if hasattr(self, 'recording_queue') and hasattr(self, 'recording_thread_handle'):
+            print("⏳ 等待录制线程写入剩余帧...")
+            # 发送结束信号（尽管is_running=False已经足够，但为了保险）
+            # self.recording_queue.put(None) 
+            self.recording_thread_handle.join(timeout=5.0)
+            print("✅ 录制线程已退出")
+
         if self.video_writer is not None:
             self.video_writer.release()
             self.video_writer = None
@@ -367,6 +406,12 @@ class MultiCameraCapture:
         
         if video_raw_path and video_raw_path.exists() and self.frame_count > 0:
             print("🔄 正在处理视频（校正FPS + 合并音频）...")
+            print("⏳ 请勿关闭，正在生成最终MP4文件...")
+            
+            # 忽略SIGINT (Ctrl+C)，防止在关键合并过程中被中断
+            import signal
+            original_handler = signal.getsignal(signal.SIGINT)
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
             
             try:
                 if audio_path and audio_path.exists() and recording_duration > 0:
@@ -388,7 +433,8 @@ class MultiCameraCapture:
                         str(final_path)
                     ]
                     
-                    result = subprocess.run(merge_cmd, capture_output=True, timeout=300)
+                    # 使用start_new_session=True使ffmpeg独立于当前进程组，避免收到Ctrl+C信号
+                    result = subprocess.run(merge_cmd, capture_output=True, timeout=300, start_new_session=True)
                     
                     if result.returncode == 0 and final_path.exists():
                         file_size = final_path.stat().st_size / (1024 * 1024)
@@ -417,6 +463,9 @@ class MultiCameraCapture:
                         print(f"✅ 保留原始录制: {final_path}")
                     except:
                         pass
+            finally:
+                # 恢复信号处理
+                signal.signal(signal.SIGINT, original_handler)
         
         # 4. 停止捕获线程
         self.is_running = False
@@ -448,7 +497,7 @@ class MultiCameraCapture:
                 '-movflags', '+faststart',
                 str(final_path)
             ]
-            result = subprocess.run(cmd, capture_output=True, timeout=300)
+            result = subprocess.run(cmd, capture_output=True, timeout=300, start_new_session=True)
             
             if result.returncode == 0 and final_path.exists():
                 file_size = final_path.stat().st_size / (1024 * 1024)
