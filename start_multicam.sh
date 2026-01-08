@@ -14,6 +14,25 @@ echo "║   4个USB摄像头 → 2x2拼接 → 完整AI分析                ║
 echo "╚════════════════════════════════════════════════════════╝"
 echo ""
 
+# 清理端口 8082 (主服务) 和 8086 (Viewer)
+for port in 8082 8086; do
+    pid=$(lsof -ti :$port)
+    if [ -n "$pid" ]; then
+        echo -e "${YELLOW}🧹 正在清理端口 $port (PID: $pid)...${NC}"
+        kill -9 $pid 2>/dev/null
+    fi
+done
+
+# 清除缓存
+echo -e "${YELLOW}🧹 清除缓存...${NC}"
+# 清除 Python 缓存
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+find . -type f -name "*.pyc" -delete 2>/dev/null
+# 清除临时文件
+rm -f integrated_data/audio/*.wav 2>/dev/null
+rm -f integrated_data/key_moments/*_temp.mp4 2>/dev/null
+echo -e "${GREEN}✅ 缓存已清除${NC}"
+
 # 激活虚拟环境
 if [ -d ".venv" ]; then
     echo -e "${GREEN}✅ 激活虚拟环境${NC}"
@@ -126,7 +145,7 @@ echo -e "${GREEN}🚀 启动多摄像头集成系统...${NC}\n"
 echo -e "${BLUE}📹 启动 Key Moments Viewer (端口 8086)...${NC}"
 python key_moments_viewer.py --port 8086 > viewer_service.log 2>&1 &
 MOMENTS_VIEWER_PID=$!
-sleep 1
+sleep 2
 echo -e "${GREEN}✅ Key Moments Viewer: http://localhost:8086${NC}\n"
 
 # 启动主系统

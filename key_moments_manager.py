@@ -781,17 +781,17 @@ class KeyMomentsManager:
             lines = lines[-220:]
 
         system = (
-            "你是一个课堂/讲解内容的关键时刻定位器。"
-            "任务：从给定的带时间戳转写中，挑出最可能值得做‘关键时刻卡片’的时间点。"
-            "关键时刻通常包含：定义/结论、重要数据/对比、推理转折、总结升华、核心观点、强烈情绪/笑点。"
-            "不要为了找而找；如果确实没有明显关键点，返回空数组。"
-            "必须给出证据：evidence 必须是从原转写中逐字摘录的短片段（不允许编造）。"
-            "输出必须是严格 JSON（不要代码块、不要额外文字）。"
+            "You are a locator of key moments for classroom/presentation content."
+            "Task: Select the time points most worthy of 'Key Moment Cards' from the given timestamped transcript."
+            "Key moments usually include: definitions/conclusions, important data/comparisons, reasoning twists, summary sublimations, core viewpoints, strong emotions/laughter."
+            "Do not force a search; if there are indeed no obvious key points, return an empty array."
+            "Must provide evidence: evidence must be a short snippet quoted verbatim from the original transcript (no fabrication allowed)."
+            "Output must be strict JSON (no code blocks, no extra text)."
         )
         prompt = (
-            f"请从以下转写中选出最多 {max_candidates} 个候选关键时刻。\n"
-            "输出格式：[{\"time_str\":\"HH:MM:SS\",\"reason\":\"...\",\"evidence\":\"...\"}, ...]\n"
-            "time_str 必须与转写里的时间戳完全一致。\n\n"
+            f"Please select up to {max_candidates} candidate key moments from the following transcript.\n"
+            "Output format: [{\"time_str\":\"HH:MM:SS\",\"reason\":\"...\",\"evidence\":\"...\"}, ...]\n"
+            "time_str must exactly match the timestamps in the transcript.\n\n"
             + "\n".join(lines)
         )
 
@@ -2774,9 +2774,9 @@ Evidence Excerpt: <1-3 items, quote ASR or historical context verbatim, preserve
             for moment in self.moments:
                 if moment.id == moment_id:
                     if not (moment.ai_description or "").strip():
-                        moment.ai_description = "AI分析失败"
+                        moment.ai_description = "AI Analysis Failed"
                     if not (moment.analysis or "").strip():
-                        moment.analysis = "[AI分析失败] 本次未生成总结（可能是模型/网络/超时）。"
+                        moment.analysis = "[AI Analysis Failed] No summary generated (model/network/timeout)."
                     moment.llm_provider = self.llm_provider
                     moment.llm_model = moment.llm_model or (self.vision_model or "")
                     break
@@ -2866,236 +2866,236 @@ Evidence Excerpt: <1-3 items, quote ASR or historical context verbatim, preserve
 
             track_ids = track_ids or []
 
-            prompt = f"""你是一位协作学习研究专家，使用专业的行为编码框架分析协作场景。
+            prompt = f"""You are a collaborative learning research expert using a professional behavior coding framework to analyze collaborative scenes.
+            
+Scene Description: This is a "Maker Marathon / Hackathon" site (prototyping, coding, debugging, discussing solutions), but we want the card text to be rhythmic and distinctive like a sports commentary.
 
-场景说明：这是“创客马拉松 / Hackathon”现场（做原型、写代码、调试、讨论方案），但我们希望卡片文案像体育赛事直播一样有节奏、有梗。
+You will receive: A video frame + a short window of speech transcript aligned with that frame (usually ±10 seconds).
 
-你将收到：一帧视频画面 + 与该帧时间对齐的短窗口语音转写（通常±10秒）。
+【Judgment Principles (Very Important)】
+1) Do not force a search: If evidence is insufficient/unclear/just normal process dialogue, please return is_key_moment=false.
+2) Key moments should reflect a clear "cognitive/collaborative transition", prioritizing R2/R3.
+    But in "lecture/viewpoint output/structured explanation" scenes, if there are:
+    - Clear concept definitions/framework proposals (Und-Exp)
+    - Structured summaries/bullet points (e.g., "Three points/First, Second, Third")
+    - Key questions driving thinking (Init-Feed/Und-Exp)
+    These can also be judged as key (importance 0.50–0.75, depending on evidence strength).
+3) Importance calibration must be conservative:
+    - 0.00–0.39: Ordinary interaction/repeated info/process
+    - 0.40–0.59: Valuable but not "key" (usually should be is_key_moment=false)
+    - 0.60–0.79: Key (clear evidence, retellable)
+    - 0.80–1.00: Strong Key (obvious breakthrough/turn/consensus/method change)
+4) Output must be short: description/meeting_note controlled within 1-2 sentences, high information density, retellable.
+5) Must provide card_summary: A short summary for the card, **strictly 20-30 words**, "Sports Commentary Style + Hackathon Context", more colloquial and fun; can include 2-3 light emojis (e.g. 🏁🛠️⚡️🎯🤖💡), but nothing vulgar.
 
-【判定原则（非常重要）】
-1) 不要为了找而找：如果证据不足/不明确/只是普通流程对话，请返回 is_key_moment=false。
-2) 关键时刻应当体现清晰的“认知/协作跃迁”，优先 R2/R3。
-    但在“讲授/观点输出/结构化讲解”场景里，如果出现：
-    - 清晰的概念定义/框架提出（Und-Exp）
-    - 结构化总结/列点（例如“有三个点/第一第二第三”）
-    - 关键提问推动思考（Init-Feed/Und-Exp）
-    也可以判为关键（importance 给到 0.50–0.75，视证据强度）。
-3) importance 标定要保守：
-    - 0.00–0.39：普通互动/重复信息/流程
-    - 0.40–0.59：有价值但不够“关键”（通常仍应 is_key_moment=false）
-    - 0.60–0.79：关键（证据清晰，可复述）
-    - 0.80–1.00：强关键（明显突破/转折/共识/方法改变）
-4) 输出要短：description/meeting_note 控制在 1-2 句，信息密度高，可复述。
-5) 需要提供 card_summary：用于卡片的简短摘要，**严格20-30字**，"体育赛事播报风 + 创客马拉松语境"，更口语更好玩；可带 2-3 个轻量表情符号（如 🏁🛠️⚡️🎯🤖💡），但不要低俗。
-
-【视觉信息】画面中的场景
-【语音内容】与该帧对齐的窗口对话转写:
+【Visual Info】 Scene in the frame
+【Audio Content】 Window dialogue transcript aligned with the frame:
 "{transcript_text}"
 
-请根据以下完整编码框架进行识别：
+Please identify according to the following complete coding framework:
 
 =================================================================
-维度一：参与与沉浸 (Engagement) - 投入时间、情感状态与心流体验
+Dimension 1: Engagement (Eng) - Time investment, emotional state, flow experience
 =================================================================
 
-【Eng-Flow 沉浸/心流】
-Engage阶段:
-- [R1] 探索性困惑: [EVT]表达好奇/困惑 "I wonder..." - "Recognition of some confusion... posing a problem."
-- [R1] 真实性确认: [KB]真实问题来源于理解世界的努力
-Investigate阶段:
-- [R1] 问题命名: [DT]定义(Define) 问题重构/洞察力生成; [Co-ref]命名-识别相关问题
-- [R1] 信息供给: [EVT]信息性-提供信息关联话题
-Act阶段:
-- [R0] 具象化行动: [DT]原型(Prototype) 制作草图/实体/低保真模型; [Co-ref]行动-解释初步解决方案
-- [R1] 改进意图: [KB]知识建构话语-旨在改进思想的话语
+【Eng-Flow Flow/Immersion】
+Engage Phase:
+- [R1] Exploratory Confusion: [EVT] Expressing curiosity/confusion "I wonder..."
+- [R1] Authenticity Confirmation: [KB] Real problems derived from efforts to understand the world
+Investigate Phase:
+- [R1] Problem Naming: [DT] Define - Problem reframing/insight generation; [Co-ref] Naming - Identifying related problems
+- [R1] Info Supply: [EVT] Informative - Providing info related to topic
+Act Phase:
+- [R0] Concrete Action: [DT] Prototype - Sketching/physical/low-fi models; [Co-ref] Action - Explaining preliminary solutions
+- [R1] Improvement Intent: [KB] Knowledge building discourse - Discourse aimed at improving ideas
 
-【Eng-Emo 情感/氛围】
-Engage阶段:
-- [R0] 情感连接: [SSBC]情感支持-表达好感/破冰 "Stresses the closeness of the relationship"
-- [R0] 尊重确认: [SSBC]尊重支持-肯定/确认观点 "Validation: Expresses agreement"
-- [R1] 相互印证: [IAM]PhI/C-相互印证例子 "Corroborating examples"
-Investigate阶段:
-- [R0] 资源接入: [SSBC]网络支持-接入人脉/资源
-- [R0] 物理陪伴: [SSBC]陪伴-花时间在一起 "Spend time with the recipient"
-- [R1] 邀请思考: [EVT]邀请性 "What do you think?" - "Inviting others to think together"
-Act阶段:
-- [R0] 实质协助: [SSBC]实质性支持-直接任务协助/借贷物品
-- [R1] 赞美评价: [SSBC]赞美-评价能力/特质 "Says positive things about abilities"
-- [R1] 集体自豪: [KB]知识民主化-为群体进步感到自豪
+【Eng-Emo Emotion/Atmosphere】
+Engage Phase:
+- [R0] Emotional Connection: [SSBC] Emotional support - Expressing fondness/ice-breaking "Stresses the closeness of the relationship"
+- [R0] Respect Confirmation: [SSBC] Respect support - Affirming/confirming views "Validation: Expresses agreement"
+- [R1] Mutual Corroboration: [IAM] PhI/C - Corroborating examples
+Investigate Phase:
+- [R0] Resource Access: [SSBC] Network support - Accessing people/resources
+- [R0] Physical Company: [SSBC] Company - "Spend time with the recipient"
+- [R1] Inviting Thought: [EVT] Inviting - "What do you think?" - "Inviting others to think together"
+Act Phase:
+- [R0] Substantial Assistance: [SSBC] Substantial support - Direct task help/lending items
+- [R1] Praise Evaluation: [SSBC] Praise - "Says positive things about abilities"
+- [R1] Collective Pride: [KB] Knowledge democratization - Pride in group progress
 
-【Eng-Strug 挣扎/坚持】
-Engage阶段:
-- [R1] 识别困难: [IAM]PhI/E-识别问题的困难 "Definition, description, or identification of a problem"
-- [R1] 处理难题: [KB]真实问题-处理对自己有重要意义的难题
-Investigate阶段:
-- [R1] 识别分歧: [IAM]PhII/A-识别分歧领域 "Identifying and stating areas of disagreement"
-- [R1] 设定限制: [Co-ref]限制-设定规范/识别限制
-Act阶段:
-- [R1] 潜力评估: [Co-ref]评估-判断潜力/适应性, 包括质疑/私人思考
-- [R2] 验证假设: [DT]测试(Test)-验证假设/什么无效
-
-=================================================================
-维度二：主动性与意图 (Initiative) - 设定目标、寻求反馈、承担风险
-=================================================================
-
-【Init-Goal 目标/计划】
-Engage阶段:
-- [R1] 目标锚定: [Co-ref]确定目标-确定优先级
-- [R1] 计划制定: [KB]认知能动性-设定目标和计划
-- [R1] 澄清细节: [IAM]PhI/D-提问以澄清细节
-Investigate阶段:
-- [R1] 角色分配: [Co-ref]确定角色/任务-分配工作
-- [R1] 流程建议: [Co-ref]提出流程-建议行动步骤
-- [R2] 认知代理: [KB]认知能动性-处理通常留给教师的问题
-Act阶段:
-- [R2] 构思发散: [DT]构思(Ideate)-数量优先/推迟判断
-- [R2] 决策叠加: [Co-ref]做决定-团队内部叠加兴趣
-- [R2] 妥协陈述: [IAM]PhIII/D-提出体现妥协的新陈述
-
-【Init-Feed 反馈/验证】
-Engage阶段:
-- [R1] 观点陈述: [IAM]PhI/A-陈述观察或意见 "A statement of observation or opinion"
-- [R1] 理解想法: [KB]观点多样性-理解周围的想法
-Investigate阶段:
-- [R2] 理由质疑: [Co-ref]质疑/要求理由
-- [R2] 澄清分歧: [IAM]PhII/B-提问澄清分歧来源
-- [R2] 综合分析: [EVT]分析性-综合评估他人理解
-Act阶段:
-- [R2] 迭代修改: [DT]测试-用户反馈/迭代修改
-- [R2] 事实测试: [IAM]PhIV/A-对照公认事实测试
-- [R2] 经验测试: [IAM]PhIV/C-对照个人经验测试
-
-【Init-Risk 风险/争论】
-Engage阶段:
-- [R2] 对比想法: [KB]观点多样性-包含对比想法
-- [R2] 疯狂想法: [DT]构思-疯狂的想法(Wild ideas)
-Investigate阶段:
-- [R2] 探索不一致: [IAM]PhII/A-发现与探索不一致
-- [R2] 论证推理: [EVT]论证性-使用推理触发讨论 "Expressing reasoning with analogies"
-- [R2] 批判挑战: [EVT]批判性-挑战或扮演恶魔代言人
-Act阶段:
-- [R3] 超越自我: [KB]超越自我(Rise Above)-超越最佳实践/新的综合
-- [R2] 论据权重: [IAM]PhIII/B-协商论据的相对权重
-- [R3] 框架重构: [Co-ref]框架/重构-导致新的边界
+【Eng-Strug Struggle/Persistence】
+Engage Phase:
+- [R1] Difficulty ID: [IAM] PhI/E - "Definition, description, or identification of a problem"
+- [R1] Handling Difficulties: [KB] Real problems - Dealing with problems significant to self
+Investigate Phase:
+- [R1] Disagreement ID: [IAM] PhII/A - "Identifying and stating areas of disagreement"
+- [R1] Setting Limits: [Co-ref] Limits - Setting norms/identifying constraints
+Act Phase:
+- [R1] Potential Assessment: [Co-ref] Assessment - Judging potential/adaptability, including questioning/private thinking
+- [R2] Hypothesis Verification: [DT] Test - Verifying assumptions/what doesn't work
 
 =================================================================
-维度三：社会支架 (Social Scaffolding) - 互助、激发灵感、物理连接
+Dimension 2: Initiative (Init) - Goal setting, feedback seeking, risk taking
 =================================================================
 
-【Soc-Ind 独立/自说自话】
-- [R0] 独立陈述(Monologue): [IAM]PhI/A陈述观察或意见但未回应他人
-- [R0] 平行研习(Parallel Study): [LDF]专注材料但无互动
-- [R0] 平行制作(Co-acting): [LDF]物理位置在一起但无认知交集
+【Init-Goal Goal/Plan】
+Engage Phase:
+- [R1] Goal Anchoring: [Co-ref] Determining goals - Determining priorities
+- [R1] Plan Formulation: [KB] Epistemic agency - Setting goals and plans
+- [R1] Clarifying Details: [IAM] PhI/D - Asking questions to clarify details
+Investigate Phase:
+- [R1] Role Assignment: [Co-ref] Determining roles/tasks - Assigning work
+- [R1] Process Suggestion: [Co-ref] Proposing process - Suggesting action steps
+- [R2] Cognitive Agency: [KB] Epistemic agency - Handling problems usually left to teachers
+Act Phase:
+- [R2] Ideation Divergence: [DT] Ideate - Quantity priority/deferring judgement
+- [R2] Decision Stacking: [Co-ref] Making decisions - Stacking interests within team
+- [R2] Compromise Statement: [IAM] PhIII/D - Proposing new statements reflecting compromise
 
-【Soc-Help 互助/教学】
-Engage阶段:
-- [R0] 关系确认: [SSBC]关系确认-强调纽带
-- [R1] 建议劝告: [SSBC]信息支持-建议/劝告 "Offers ideas or suggests actions"
-Investigate阶段:
-- [R1] 消除盲区: [SSBC]教学-提供详细事实/消除盲区
-- [R1] 信息提供: [Co-ref]提供信息-给于信息/外部示例
-- [R1] 文献支持: [IAM]PhII/C-引用文献/数据支持观点
-Act阶段:
-- [R0] 直接任务: [SSBC]实质性支持-直接任务/间接任务
-- [R1] 积极参与: [SSBC]积极参与-一起参与活动减压
-- [R3] 对称贡献: [KB]对称知识进步-跨团队互动贡献资源
+【Init-Feed Feedback/Verification】
+Engage Phase:
+- [R1] Viewpoint Statement: [IAM] PhI/A - "A statement of observation or opinion"
+- [R1] Understanding Ideas: [KB] Idea diversity - Understanding surrounding ideas
+Investigate Phase:
+- [R2] Reason Questioning: [Co-ref] Questioning/asking for reasons
+- [R2] Clarifying Divergence: [IAM] PhII/B - Asking to clarify source of disagreement
+- [R2] Comprehensive Analysis: [EVT] Analytical - Comprehensively evaluating others' understanding
+Act Phase:
+- [R2] Iterative Modification: [DT] Test - User feedback/iterative modification
+- [R2] Fact Testing: [IAM] PhIV/A - Testing against accepted facts
+- [R2] Experience Testing: [IAM] PhIV/C - Testing against personal experience
 
-【Soc-Insp 激发/共享】
-Engage阶段:
-- [R1] 印证例子: [IAM]PhI/C-相互印证例子
-- [R2] 丰富环境: [KB]观点多样性-创造丰富的演变环境
-Investigate阶段:
-- [R2] 数据支持: [IAM]PhII/C-引用文献/数据支持观点
-- [R2] 权威扩展: [KB]权威资料应用-超越既定资料扩展理解
-- [R2] 解释细化: [EVT]解释性-在前人基础上细化
-Act阶段:
-- [R3] 启发发现: [EVT]启发式(Heuristic) "A ha!" - "Expressing discovery... directing others' attention"
-- [R3] 综合观点: [Co-ref]提出综合观点
-- [R3] 整合隐喻: [IAM]PhIII/E-提出整合性的隐喻或类比
-
-【Soc-Conn 连接/协同】
-Engage阶段:
-- [R0] 物理在场: [SSBC]陪伴-物理上的在场
-- [R1] 共享责任: [KB]集体责任-共享推进知识的责任
-Investigate阶段:
-- [R1] 促进理解: [Co-ref]促进理解
-- [R0] 同伴关系: [SSBC]同伴关系-提醒还有他人支持
-Act阶段:
-- [R3] 贡献专长: [KB]对称知识进步-不同成员贡献专长
-- [R3] 共同建构: [IAM]PhIII/D-共同建构 "Co-construction"
-- [R2] 兴趣叠加: [Co-ref]内部叠加-团队兴趣叠加
+【Init-Risk Risk/Argument】
+Engage Phase:
+- [R2] Contrasting Ideas: [KB] Idea diversity - Including contrasting ideas
+- [R2] Wild Ideas: [DT] Ideate - Wild ideas
+Investigate Phase:
+- [R2] Exploring Inconsistency: [IAM] PhII/A - Discovering and exploring inconsistency
+- [R2] Argumentation: [EVT] Argumentative - "Expressing reasoning with analogies"
+- [R2] Critical Challenge: [EVT] Critical - Challenging or playing devil's advocate
+Act Phase:
+- [R3] Rise Above: [KB] Rise Above - Beyond best practices/new synthesis
+- [R2] Argument Weight: [IAM] PhIII/B - Negotiating relative weight of arguments
+- [R3] Frame Reframing: [Co-ref] Frame/Reframing - Leading to new boundaries
 
 =================================================================
-维度四：理解的发展 (Understanding) - 顿悟、解释策略、应用知识
+Dimension 3: Social Scaffolding (Soc) - Mutual aid, inspiration, physical connection
 =================================================================
 
-【Und-Exp 解释/推演】
-Engage阶段:
-- [R1] 定义问题: [IAM]PhI/E-定义或描述问题
-- [R1] 问题命名: [Co-ref]命名-识别相关问题
-Investigate阶段:
-- [R1] 参考经验: [Co-ref]参考过去经验-已知要素
-- [R2] 解释连接: [EVT]解释性-旨在解释清楚的连接链
-- [R2] 引用支持: [IAM]PhII/C-引用经验/文献支持
-Act阶段:
-- [R2] 解释方案: [Co-ref]提出改变建议-解释初步解决方案
-- [R2] 协商术语: [IAM]PhIII/A-协商术语含义
-- [R2] 细化观点: [EVT]解释性-Elaborate ideas
+【Soc-Ind Independent/Monologue】
+- [R0] Monologue: [IAM] PhI/A Stating observation or opinion but not responding to others
+- [R0] Parallel Study: [LDF] Focusing on material but no interaction
+- [R0] Parallel Co-acting: [LDF] Physically together but no cognitive intersection
 
-【Und-Aha 顿悟/突破】⭐关键识别
-Engage阶段:
-- [R3] 真实基石: [KB]真实思想Real Ideas-真实基石
-- [R3] 洞察力: [DT]洞察力生成-Insight generation
-Investigate阶段:
-- [R3] 发现时刻: [EVT]启发式 "I find it!" / 发现 ⭐ "Expressing discovery (A ha! moments)"
-- [R3] 可改进: [KB]可改进的思想-思想是可改进的
-Act阶段:
-- [R3] 新的综合: [KB]超越自我(Rise Above)-达到新的综合 ⭐
-- [R3] 应用新知: [IAM]PhV/B-应用新知识
-- [R3] 元认知改变: [IAM]PhV/C-元认知层面的改变 ⭐ "Ways of thinking have changed"
+【Soc-Help Mutual Aid/Teaching】
+Engage Phase:
+- [R0] Relationship Confirmation: [SSBC] Relationship confirmation - Emphasizing bonds
+- [R1] Advice: [SSBC] Informational support - "Offers ideas or suggests actions"
+Investigate Phase:
+- [R1] Blind Spot Removal: [SSBC] Teaching - Providing detailed facts/removing blind spots
+- [R1] Info Provision: [Co-ref] Providing info - Giving info/external examples
+- [R1] Literature Support: [IAM] PhII/C - Citing literature/data to support views
+Act Phase:
+- [R0] Direct Task: [SSBC] Substantial support - Direct task/indirect task
+- [R1] Active Participation: [SSBC] Active participation - Participating in activities together for stress relief
+- [R3] Symmetric Contribution: [KB] Symmetric knowledge advancement - Cross-team interaction contributing resources
 
-【Und-Strive 深思/内化】
-Engage阶段:
-- [R1] 认知困惑: [EVT]探索性-认知困惑/Curiosity
-- [R2] 精神生活: [KB]普遍知识建构-贯穿精神生活
-Investigate阶段:
-- [R2] 个人思考: [Co-ref]个人思考-Private reflection
-- [R2] 检查实践: [EVT]反思性-检查过去的实践/理解
-- [R2] 识别问题: [KB]嵌入式评估-识别问题
-Act阶段:
-- [R2] 倾听反向反馈: [Co-ref]反思-倾听情境的"反向反馈"
-- [R2] 认知图式测试: [IAM]PhIV/B-对照现有认知图式测试
-- [R2] 隐含性决策: [EVT]隐含性-基于洞察力提出决策
+【Soc-Insp Inspiration/Sharing】
+Engage Phase:
+- [R1] Corroborating Examples: [IAM] PhI/C - Mutually corroborating examples
+- [R2] Enriching Environment: [KB] Idea diversity - Creating rich evolutionary environment
+Investigate Phase:
+- [R2] Data Support: [IAM] PhII/C - Citing literature/data to support views
+- [R2] Authority Extension: [KB] Authoritative sources - Extending understanding beyond set materials
+- [R2] Explanation Refinement: [EVT] Explanatory - Refining on basis of predecessors
+Act Phase:
+- [R3] Heuristic Discovery: [EVT] Heuristic "A ha!" - "Expressing discovery... directing others' attention"
+- [R3] Integrated Viewpoint: [Co-ref] Proposing integrated viewpoint
+- [R3] Integrating Metaphor: [IAM] PhIII/E - Proposing integrating metaphor or analogy
 
-=================================================================
-理论来源图例
-=================================================================
-[LDF]: Tinkering学习维度  [Hack4CBL]: 时间阶段
-[IAM]: 交互分析模型       [DT]: d.school设计思维
-[EVT]: 有价值教育对话     [KB]: 知识建构原则
-[Co-ref]: 共同反思实践    [SSBC]: 社会支持行为
-R0-R3: Fleck和Fitzpatrick(2010)反思层级
+【Soc-Conn Connection/Synergy】
+Engage Phase:
+- [R0] Physical Presence: [SSBC] Company - Physical presence
+- [R1] Shared Responsibility: [KB] Collective responsibility - Shared responsibility for advancing knowledge
+Investigate Phase:
+- [R1] Facilitating Understanding: [Co-ref] Facilitating understanding
+- [R0] Peer Relationship: [SSBC] Peer relationship - Reminding that others support
+Act Phase:
+- [R3] Contributing Expertise: [KB] Symmetric knowledge advancement - Different members contributing expertise
+- [R3] Co-construction: [IAM] PhIII/D - "Co-construction"
+- [R2] Interest Stacking: [Co-ref] Internal stacking - Team interest stacking
 
 =================================================================
+Dimension 4: Understanding Development (Und) - Epiphany, explanation strategy, application
+=================================================================
 
-请分析并以JSON格式返回:
+【Und-Exp Explanation/Deduction】
+Engage Phase:
+- [R1] Defining Problem: [IAM] PhI/E - Defining or describing problem
+- [R1] Problem Naming: [Co-ref] Naming - Identifying related problems
+Investigate Phase:
+- [R1] Referencing Experience: [Co-ref] Reference past experience - Known elements
+- [R2] Explanatory Connection: [EVT] Explanatory - Connection chain aimed at explaining clearly
+- [R2] Citing Support: [IAM] PhII/C - Citing experience/literature support
+Act Phase:
+- [R2] Explaining Solution: [Co-ref] Proposing change suggestions - Explaining preliminary solution
+- [R2] Negotiating Terminology: [IAM] PhIII/A - Negotiating terminology meaning
+- [R2] Refining Viewpoint: [EVT] Explanatory - Elaborate ideas
+
+【Und-Aha Epiphany/Breakthrough】 ⭐ Key ID
+Engage Phase:
+- [R3] Real Cornerstone: [KB] Real Ideas - Real cornerstone
+- [R3] Insight: [DT] Insight generation
+Investigate Phase:
+- [R3] Discovery Moment: [EVT] Heuristic "I find it!" / Discovery ⭐ "Expressing discovery (A ha! moments)"
+- [R3] Improvable: [KB] Improvable ideas - Ideas are improvable
+Act Phase:
+- [R3] New Synthesis: [KB] Rise Above - Achieving new synthesis ⭐
+- [R3] Applying New Knowledge: [IAM] PhV/B - Applying new knowledge
+- [R3] Metacognitive Change: [IAM] PhV/C - Change at metacognitive level ⭐ "Ways of thinking have changed"
+
+【Und-Strive Deep Thinking/Internalization】
+Engage Phase:
+- [R1] Cognitive Confusion: [EVT] Exploratory - Cognitive confusion/Curiosity
+- [R2] Mental Life: [KB] Pervasive knowledge building - Pervasive mental life
+Investigate Phase:
+- [R2] Personal Thinking: [Co-ref] Personal thinking - Private reflection
+- [R2] Examining Practice: [EVT] Reflective - Examining past practice/understanding
+- [R2] Identifying Problems: [KB] Embedded assessment - Identifying problems
+Act Phase:
+- [R2] Listening to Back-talk: [Co-ref] Reflection - Listening to situational "back-talk"
+- [R2] Cognitive Schema Testing: [IAM] PhIV/B - Testing against existing cognitive schema
+- [R2] Implicit Decision: [EVT] Implicit - Proposing decision based on insight
+
+=================================================================
+Theoretical Source Legend
+=================================================================
+[LDF]: Tinkering Learning Dimension  [Hack4CBL]: Time Phase
+[IAM]: Interaction Analysis Model    [DT]: d.school Design Thinking
+[EVT]: Valued Educational Talk       [KB]: Knowledge Building Principles
+[Co-ref]: Co-reflective Practice     [SSBC]: Social Support Behavior Codes
+R0-R3: Fleck & Fitzpatrick (2010) Reflection Hierarchy
+
+=================================================================
+
+Please analyze and return in JSON format:
 {{
     "is_key_moment": true/false,
     "importance": 0.0-1.0,
     "reflection_level": "R0|R1|R2|R3",
     "phase": "Engage|Investigate|Act",
     "primary_dimension": "Engagement|Initiative|Social|Understanding",
-    "behavior_code": "L1行为代码如 Eng-Flow/Eng-Emo/Init-Goal/Soc-Help/Und-Aha等",
-    "specific_behavior": "具体子行为如 [R2]论证推理/[R3]发现时刻/[R1]问题命名等",
-    "theoretical_source": "理论来源如 [IAM]PhII/A/[EVT]启发式/[KB]超越自我等",
-    "description": "一句话描述正在发生什么（偏客观、可复述）",
-    "card_summary": "用于关键时刻卡片的一句话（更口语/更幽默，可带表情符号）",
-    "key_quote": "如果有关键对话，摘录最重要的一句",
-    "observable_evidence": "可观察的行为证据",
-    "meeting_note": "用于会议纪要的简洁记录"
+    "behavior_code": "L1 behavior code e.g. Eng-Flow/Eng-Emo/Init-Goal/Soc-Help/Und-Aha etc.",
+    "specific_behavior": "Specific sub-behavior e.g. [R2] Argumentation/[R3] Discovery Moment/[R1] Problem Naming etc.",
+    "theoretical_source": "Theoretical source e.g. [IAM] PhII/A/[EVT] Heuristic/[KB] Rise Above etc.",
+    "description": "One sentence describing what is happening (objective, retellable)",
+    "card_summary": "One sentence for key moment card (more colloquial/humorous, can use emojis)",
+    "key_quote": "If there is key dialogue, quote the most important sentence",
+    "observable_evidence": "Observable behavioral evidence",
+    "meeting_note": "Concise record for meeting minutes"
 }}
 
-只返回JSON，不要其他内容。"""
+Return JSON only, no other content."""
 
             result_text = self._run_vision_llm(
                 image_base64=image_base64,
@@ -3584,38 +3584,38 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
             for m in sorted(self.moments, key=lambda x: x.timestamp):
                 summary = {
                     "time": m.time_str,
-                    "source": "用户标记" if m.source == "user_anchor" else "AI识别",
-                    "description": m.user_note or m.ai_description or "未描述",
+                    "source": "User Marked" if m.source == "user_anchor" else "AI Detected",
+                    "description": m.user_note or m.ai_description or "No description",
                     "person_count": m.person_count,
                     "importance": m.ai_importance if m.source == "ai_detected" else 0.8,
                     "tags": m.ai_tags
                 }
                 moments_summary.append(summary)
             
-            prompt = f"""你是一位纪录片导演和教育研究者。请基于以下协作学习活动中的关键时刻，创作一份团队叙事报告。
+            prompt = f"""You are a documentary director and educational researcher. Based on the following key moments from a collaborative learning activity, create a team narrative report.
 
-关键时刻记录:
+Key Moments Record:
 {json.dumps(moments_summary, ensure_ascii=False, indent=2)}
 
-请生成:
-1. 叙事总结 (3-5句话的整体故事线)
-2. 关键章节 (将时刻组织成有意义的阶段)
-3. 团队洞察 (从这些时刻中观察到的协作模式和亮点)
-4. 反思问题 (2-3个引导学生反思的问题)
+Please generate:
+1. Narrative Summary (3-5 sentences overall storyline)
+2. Key Chapters (Organize moments into meaningful stages)
+3. Team Insights (Collaboration patterns and highlights observed from these moments)
+4. Reflection Questions (2-3 questions to guide student reflection)
 
-以JSON格式返回:
+Return in JSON format:
 {{
-    "narrative_summary": "整体叙事...",
+    "narrative_summary": "Overall narrative...",
     "chapters": [
         {{
-            "title": "章节标题",
+            "title": "Chapter Title",
             "time_range": "00:00-05:00",
-            "description": "这个阶段发生了什么",
-            "moment_ids": ["相关moment的id"]
+            "description": "What happened in this stage",
+            "moment_ids": ["related moment ids"]
         }}
     ],
-    "team_insights": ["洞察1", "洞察2"],
-    "reflection_questions": ["问题1", "问题2"]
+    "team_insights": ["Insight 1", "Insight 2"],
+    "reflection_questions": ["Question 1", "Question 2"]
 }}"""
 
             result_text = self._run_text_llm(
@@ -3822,22 +3822,22 @@ R0-R3: Fleck和Fitzpatrick(2010)反思层级
             })
 
         system = (
-            "你是一个严谨的协作分析助手。\n"
-            "任务：基于给定的关键时刻卡片内容，找出不同时刻之间的可解释联系（Linkography）。\n"
-            "必须遵守：1) 只能引用输入字段，不得编造；2) 如果证据不足，就不连边；3) 输出必须是严格 JSON（不要代码块、不要额外文字）。\n"
-            "边类型建议：same_topic, follow_up, cause_effect, supports, contradicts, decision_related。"
+            "You are a rigorous collaborative analysis assistant.\n"
+            "Task: Based on the given key moment cards, find interpretable links between different moments (Linkography).\n"
+            "Must obey: 1) Only cite input fields, do not fabricate; 2) If evidence is insufficient, do not link; 3) Output must be strict JSON (no code blocks, no extra text).\n"
+            "Edge type suggestions: same_topic, follow_up, cause_effect, supports, contradicts, decision_related."
         )
 
         prompt = (
-            "给你一组 moments（按时间排序）。请输出一个 JSON 对象：\n"
+            "Given a set of moments (sorted by time). Please output a JSON object:\n"
             "{\n"
             "  \"nodes\": [{\"id\":\"...\",\"t\":1700000000.0,\"label\":\"...\"}],\n"
-            "  \"edges\": [{\"source\":\"id1\",\"target\":\"id2\",\"type\":\"same_topic\",\"reason\":\"<=20字\"}]\n"
+            "  \"edges\": [{\"source\":\"id1\",\"target\":\"id2\",\"type\":\"same_topic\",\"reason\":\"<=20 words\"}]\n"
             "}\n"
-            "要求：\n"
-            "- nodes 必须覆盖所有输入 id；label 用中文短语概括（<=16字）。\n"
-            "- edges 最多 60 条，连接明确相关或可能相关的关系；reason 必须短且可从输入中推断。\n"
-            "- 不要使用不存在的 id。\n\n"
+            "Requirements:\n"
+            "- nodes must cover all input ids; label: use English phrase to summarize (<=16 words).\n"
+            "- edges: max 60 items, connect clearly related or potentially related relations; reason must be short and inferred from input.\n"
+            "- Do not use non-existent ids.\n\n"
             + json.dumps(items, ensure_ascii=False, indent=2)
         )
 

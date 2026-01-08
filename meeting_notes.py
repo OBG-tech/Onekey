@@ -187,22 +187,22 @@ class MeetingNotesGenerator:
             print("🤖 正在生成会议纪要...")
             
             # 调用AI生成纪要
-            system_prompt = "你是一个专业的会议纪要助手,擅长从对话中提取关键信息。"
-            prompt = f"""请分析以下会议对话内容,生成结构化会议纪要。
+            system_prompt = "You are a professional meeting notes assistant, skilled at extracting key information from conversations."
+            prompt = f"""Please analyze the following meeting dialogue and generate structured meeting notes.
 
-会议对话:
+Meeting Dialogue:
 {transcript_text}
 
-请按以下格式输出JSON:
+Please output in the following JSON format:
 {{
-    "summary": "会议整体概要(2-3句话)",
-    "key_points": ["关键要点1", "关键要点2", "关键要点3"],
-    "action_items": ["待办事项1", "待办事项2"],
-    "participants_mentioned": ["提到的参与者姓名"],
-    "topics": ["讨论的主题"]
+    "summary": "Overall meeting summary (2-3 sentences)",
+    "key_points": ["Key point 1", "Key point 2", "Key point 3"],
+    "action_items": ["Action item 1", "Action item 2"],
+    "participants_mentioned": ["Mentioned participant names"],
+    "topics": ["Discussion topics"]
 }}
 
-只返回JSON,不要其他说明。"""
+Return only JSON, no other explanations."""
             
             client = self._build_client()
             
@@ -267,20 +267,20 @@ class MeetingNotesGenerator:
         txt_filepath = self.output_dir / f"meeting_notes_{timestamp}.txt"
         with open(txt_filepath, 'w', encoding='utf-8') as f:
             f.write("=" * 60 + "\n")
-            f.write(f"会议纪要 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Meeting Notes - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write("=" * 60 + "\n\n")
             
-            f.write("📝 会议概要:\n")
+            f.write("📝 Meeting Summary:\n")
             f.write(f"{notes['summary']}\n\n")
             
             if notes['key_points']:
-                f.write("🔑 关键要点:\n")
+                f.write("🔑 Key Points:\n")
                 for i, point in enumerate(notes['key_points'], 1):
                     f.write(f"{i}. {point}\n")
                 f.write("\n")
             
             if notes['action_items']:
-                f.write("✅ 待办事项:\n")
+                f.write("✅ Action Items:\n")
                 for i, item in enumerate(notes['action_items'], 1):
                     f.write(f"{i}. {item}\n")
                 f.write("\n")

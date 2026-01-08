@@ -662,7 +662,7 @@ class RealtimeASR:
                 return False
         
         if self.is_recording:
-            print("⚠️  已在录制中")
+            print("⚠️  Already recording")
             return False
         
         self.is_recording = True
@@ -779,6 +779,7 @@ class RealtimeASR:
 
         return {
             "is_recording": self.is_recording,
+            "is_running": self.is_recording,  # Alias for frontend compatibility
             "available": available,
             "segment_count": segment_count,
             "current_text": self.current_text,
@@ -787,7 +788,7 @@ class RealtimeASR:
             "model_dir": self.asr_model_dir,
             "asr_type": self.asr_type,
             "is_paused": self.is_paused,
-            "message": "运行中" if self.is_recording else "就绪"
+            "message": "Running" if self.is_recording else "Ready"
         }
 
 

@@ -13,6 +13,12 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 import threading
 import argparse
+import urllib.request
+import urllib.error
+import urllib.parse
+
+# Config
+MAIN_SYSTEM_URL = "http://localhost:8082"
 
 # 配置
 PORT = 8084
@@ -659,37 +665,18 @@ class MomentsHandler(SimpleHTTPRequestHandler):
                     mime_type = 'application/octet-stream'
                 
                 self.send_response(200)
-                self.send_header('Content-Type', mime_type)
-                self.send_header('Content-Length', filepath.stat().st_size)
-                self.send_header('Content-Disposition', f'inline; filename="{filename}"')
-                self.end_headers()
-                
-                with open(filepath, 'rb') as f:
-                    self.wfile.write(f.read())
-                return
-            else:
-                self.send_error(404, f'File not found: {filename}')
-                return
-        
-        if path.startswith('/download/'):
-            filename = path[10:]
-            filepath = MOMENTS_MEDIA_DIR / filename
+            self.end_headers()
+            self.wfile.write(json.dumps({'moments': load_moments()}).encode('utf-8'))
+        else:
+            self.send_error(404)
+
+    def do_POST(self):
+        # Proxy API requests to main system
+        if self.path.startswith('/api/realtime_asr/') or self.path.startswith('/api/meeting_notes/'):
+            self._proxy_to_main_system()
+            return
             
-            if filepath.exists():
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/octet-stream')
-                self.send_header('Content-Length', filepath.stat().st_size)
-                self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
-                self.end_headers()
-                
-                with open(filepath, 'rb') as f:
-                    self.wfile.write(f.read())
-                return
-            else:
-                self.send_error(404, f'File not found: {filename}')
-                return
-        
-        self.send_error(404, 'Not found')
+        self.send_error(404)
     
     def log_message(self, format, *args):
         print(f"[MomentsViewer] {args[0]}")

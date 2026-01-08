@@ -1813,7 +1813,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if not REALTIME_ASR_AVAILABLE:
             return {
                 "available": False,
-                "error": "实时语音识别模块不可用，请安装 pyaudio 和 dashscope"
+                "error": "Real-time speech recognition unavailable, please install pyaudio and dashscope"
             }
         
         if realtime_asr_engine is None:
@@ -1825,6 +1825,12 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             }
         
         state = realtime_asr_engine.get_status()
+        
+        # Debug logging to trace sync issues
+        client_address = getattr(self, 'client_address', ('unknown', 0))
+        # Uncomment the following line for verbose debugging if needed
+        # print(f"🔍 [Sync Debug] Client {client_address[0]}:{client_address[1]} polling status. Recording: {state.get('is_recording')}, Segments: {state.get('segment_count')}")
+        
         return {
             "available": True,
             **state
@@ -1867,7 +1873,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if not REALTIME_ASR_AVAILABLE:
             self.send_json_response({
                 "success": False,
-                "error": "实时语音识别不可用"
+                "error": "Real-time speech recognition unavailable"
             })
             return
         
@@ -1939,16 +1945,25 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
                 
                 realtime_asr_engine.on_transcript_update = on_transcript_update
             
+            # Check if already recording - return success without starting again
+            if realtime_asr_engine.is_recording:
+                self.send_json_response({
+                    "success": True,
+                    "message": "Speech recognition already running",
+                    "already_running": True
+                })
+                return
+            
             # 启动
             success = realtime_asr_engine.start()
             
             self.send_json_response({
                 "success": success,
-                "message": "实时语音识别已启动" if success else "启动失败"
+                "message": "Speech recognition started" if success else "Failed to start"
             })
             
         except Exception as e:
-            print(f"启动实时 ASR 错误: {e}")
+            print(f"Start realtime ASR error: {e}")
             import traceback
             traceback.print_exc()
             self.send_json_response({
@@ -1963,7 +1978,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if realtime_asr_engine is None:
             self.send_json_response({
                 "success": True,
-                "message": "ASR 引擎未运行"
+                "message": "ASR engine not running"
             })
             return
         
@@ -1971,7 +1986,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             realtime_asr_engine.stop()
             self.send_json_response({
                 "success": True,
-                "message": "实时语音识别已停止"
+                "message": "Speech recognition stopped"
             })
         except Exception as e:
             self.send_json_response({
