@@ -2514,38 +2514,38 @@ def generate_meeting_notes_with_llm(transcript: str, mode: str = 'realtime') -> 
         return {"error": f"{provider_name} API 不可用"}
     
     try:
-        # 构建 prompt
+        # Build prompt
         if mode == 'realtime':
-            prompt = f"""请根据以下会议转写内容，生成简洁的实时会议纪要。
+            prompt = f"""Please generate a concise real-time meeting summary based on the following transcript.
 
-转写内容:
+Transcript:
 {transcript}
 
-请以 JSON 格式返回:
+Please return in JSON format:
 {{
-    "summary": "一句话概括当前讨论内容",
-    "key_points": ["要点1", "要点2"],
-    "action_items": ["待办事项1"],
-    "decisions": ["决议1"]
+    "summary": "One sentence summary of the current discussion",
+    "key_points": ["Point 1", "Point 2"],
+    "action_items": ["Action item 1"],
+    "decisions": ["Decision 1"]
 }}
 
-只返回 JSON，不要其他内容。如果内容太少无法提取，返回空数组。"""
+Return ONLY JSON. If content is insufficient, return empty arrays."""
         else:
-            prompt = f"""请根据以下完整会议转写内容，生成详细的会议纪要。
+            prompt = f"""Please generate a detailed meeting summary based on the following complete transcript.
 
-转写内容:
+Transcript:
 {transcript}
 
-请以 JSON 格式返回:
+Please return in JSON format:
 {{
-    "summary": "会议整体摘要（2-3句话）",
-    "key_points": ["讨论要点1", "讨论要点2", "讨论要点3"],
-    "action_items": ["待办事项1: 责任人", "待办事项2: 责任人"],
-    "decisions": ["决议1", "决议2"],
-    "participants_insights": ["参与者观点1", "参与者观点2"]
+    "summary": "Overall meeting summary (2-3 sentences)",
+    "key_points": ["Discussion point 1", "Discussion point 2", "Discussion point 3"],
+    "action_items": ["Action item 1: Owner", "Action item 2: Owner"],
+    "decisions": ["Decision 1", "Decision 2"],
+    "participants_insights": ["Participant insight 1", "Participant insight 2"]
 }}
 
-只返回 JSON，不要其他内容。"""
+Return ONLY JSON. Do not include any other text."""
         
         # 根据 provider 调用不同的 API
         if LLM_PROVIDER.startswith("claude"):
