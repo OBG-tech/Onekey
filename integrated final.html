@@ -2171,7 +2171,7 @@
     <!-- 悬浮红色标记按钮 (FAB) -->
     <button class="floating-mark-btn" onclick="markKeyMoment()" title="Mark Key Moment (Space)">
         🔴
-        <span class="fab-tooltip">标记关键时刻 (Space)</span>
+        <span class="fab-tooltip">Mark Key Moment (Space)</span>
     </button>
 
     <!-- 主窗口 -->
@@ -3668,7 +3668,7 @@
                             } else if (transcript) {
                                 parts.push(transcript.slice(0, 60));
                             } else {
-                                parts.push('(无描述)');
+                                parts.push('(No description)');
                             }
 
                             return parts.join('');
@@ -3757,9 +3757,9 @@
                         grid.innerHTML = `
                             <div class="empty-state" style="width:100%; text-align:center; padding: 20px;">
                                 <div style="font-size: 48px; margin-bottom: 8px;">🎯</div>
-                                <div style="color:#666;">暂无关键时刻</div>
+                                <div style="color:#666;">No Key Moments</div>
                                 <div style="font-size:11px; color:#999; margin-top: 4px;">
-                                    按下红色按钮标记重要时刻，或等待 AI 每2分钟自动识别
+                                    Press the red button to mark key moments, or wait for AI auto-detection every 2 minutes
                                 </div>
                             </div>
                         `;
@@ -4005,7 +4005,7 @@
                     dot.style.left = `${axisX - size / 2}px`;
                     dot.style.top = `${y}px`;
                     const key = String(g?.key || '').trim();
-                    const hint = g?.hasUser ? '含User标记' : '仅AI';
+                    const hint = g?.hasUser ? 'User Marked' : 'AI Only';
                     dot.title = `20分钟聚合点：${key || '—'} | ${count}条 | ${hint}`;
                     box.appendChild(dot);
                 }
@@ -4402,10 +4402,10 @@
                 t.setAttribute('fill', 'rgba(0,0,0,0.55)');
                 t.setAttribute('font-size', '10');
 
-                let msg = '暂无 Linkography';
-                if (data?.status === 'llm_unavailable') msg = 'LLM 未配置';
-                else if (data?.status === 'error') msg = '加载失败 (见控制台)';
-                else if (data?.status) msg = `无数据 (${data.status})`;
+                let msg = 'No Linkography';
+                if (data?.status === 'llm_unavailable') msg = 'LLM Not Configured';
+                else if (data?.status === 'error') msg = 'Load Failed (see console)';
+                else if (data?.status) msg = `No Data (${data.status})`;
 
                 t.textContent = msg;
                 svg.appendChild(t);
@@ -4744,7 +4744,7 @@
                 }, 10);
 
                 // 显示提示
-                showToast(`🔥 重要性 +${markPressCount}（${MARK_WINDOW_MS / 1000}秒内重复标记会合并）`, 'info');
+                showToast(`🔥 Importance +${markPressCount} (Merged if repeated within ${MARK_WINDOW_MS / 1000}s)`, 'info');
 
                 // 清除之前的定时器
                 if (markDebounceTimer) {
@@ -4772,7 +4772,7 @@
             }, 1000);
 
             // 立即视觉反馈
-            showToast('🔴 关键时刻标记中...', 'info');
+            showToast('🔴 Marking Key Moment...', 'info');
         }
 
         function sendMarkRequest(note, pressCount) {
@@ -4800,8 +4800,8 @@
                         if (noteInput) noteInput.value = '';
 
                         // 显示成功反馈
-                        const intensityMsg = pressCount > 1 ? ` (强度:${pressCount}次)` : '';
-                        showToast(`🔴 关键时刻已标记: ${data.moment.time_str}${intensityMsg}`, 'success');
+                        const intensityMsg = pressCount > 1 ? ` (Intensity:${pressCount}x)` : '';
+                        showToast(`🔴 Key Moment Marked: ${data.moment.time_str}${intensityMsg}`, 'success');
 
                         // 立即刷新关键时刻列表
                         updateKeyMoments();
@@ -4809,12 +4809,12 @@
                         // 重置计数
                         markPressCount = 0;
                     } else {
-                        showToast(`❌ 标记失败: ${data.error}`, 'error');
+                        showToast(`❌ Mark failed: ${data.error}`, 'error');
                     }
                 })
                 .catch(error => {
                     console.error('Error marking moment:', error);
-                    showToast('❌ 标记失败: 网络错误', 'error');
+                    showToast('❌ Mark failed: Network error', 'error');
                 });
 
             // 视觉反馈 - 灯光特效
@@ -4871,14 +4871,14 @@
                     <div style="width: 18px; height: 18px; border: 2px solid black; background: white; 
                                 margin-left: 6px; cursor: pointer;" onclick="this.closest('div').closest('div').closest('div').remove()"></div>
                     <div style="position: absolute; left: 50%; transform: translateX(-50%); 
-                                background: white; padding: 0 12px; font-weight: bold;">📖 团队叙事</div>
+                                background: white; padding: 0 12px; font-weight: bold;">📖 Team Narrative</div>
                 </div>
                 <div style="padding: 16px;">
-                    <h3 style="margin: 0 0 12px 0; font-size: 18px;">📜 叙事摘要</h3>
-                    <p style="color: #333; line-height: 1.6;">${narrative.narrative_summary || '暂无摘要'}</p>
+                    <h3 style="margin: 0 0 12px 0; font-size: 18px;">📜 Narrative Summary</h3>
+                    <p style="color: #333; line-height: 1.6;">${narrative.narrative_summary || 'No summary available'}</p>
                     
                     ${narrative.chapters && narrative.chapters.length > 0 ? `
-                        <h3 style="margin: 16px 0 8px 0; font-size: 16px;">📚 章节</h3>
+                        <h3 style="margin: 16px 0 8px 0; font-size: 16px;">📚 Chapters</h3>
                         ${narrative.chapters.map(ch => `
                             <div style="background: #f5f5f5; padding: 8px; margin: 8px 0; border-left: 3px solid #3498db;">
                                 <strong>${ch.title}</strong> <span style="color: #999; font-size: 12px;">${ch.time_range}</span>
@@ -4902,7 +4902,7 @@
                     ` : ''}
                     
                     <div style="margin-top: 16px; text-align: center; color: #999; font-size: 11px;">
-                        生成时间: ${narrative.generated_at || '--'} | 总关键时刻: ${narrative.total_moments || 0}
+                        Generated: ${narrative.generated_at || '--'} | Total Key Moments: ${narrative.total_moments || 0}
                     </div>
                 </div>
             `;
@@ -4955,7 +4955,7 @@
                         <div style="padding: 16px; font-family: 'VT323', monospace;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <span style="font-size: 18px; font-weight: bold;">
-                                    ${isUserAnchor ? '🔴 用户标记' : '🤖 AI识别'}
+                                    ${isUserAnchor ? '🔴 User Mark' : '🤖 AI Detected'}
                                     ${moment.video_url ? ' 📹' : ''}
                                 </span>
                                 <span style="color: #666;">${moment.time_str}</span>
@@ -5049,6 +5049,77 @@
         let notesUpdateInterval = null;
         let realtimeASRPollInterval = null;
         let asrAvailable = false;
+        let asrStateSyncInterval = null;  // Polling interval for cross-browser sync
+
+        // Sync recording state from server (for cross-browser sync)
+        async function syncRecordingState() {
+            try {
+                // Add timestamp to prevent caching
+                const response = await fetch('/api/realtime_asr/status?t=' + Date.now());
+                const data = await response.json();
+
+                if (!data.available) return;
+
+                const serverIsRecording = data.is_running || data.is_recording;
+
+                // If server state differs from local state, update UI
+                if (serverIsRecording !== isRecording) {
+                    console.log(`🔄 Syncing recording state: ${isRecording} -> ${serverIsRecording}`);
+
+                    if (serverIsRecording) {
+                        // Server says recording is active, update UI to match
+                        isRecording = true;
+                        if (!asrStartTime) asrStartTime = Date.now();
+
+                        document.getElementById('asr-start-btn').innerHTML = '⏹️ Stop';
+                        document.getElementById('asr-start-btn').style.background = 'linear-gradient(145deg, #e74c3c, #c0392b)';
+                        document.getElementById('asr-indicator').style.background = '#27ae60';
+                        document.getElementById('asr-indicator').style.animation = 'pulse 1s infinite';
+                        document.getElementById('asr-status-text').textContent = 'Recording...';
+
+                        // Start duration timer if not running
+                        if (!asrDurationInterval) {
+                            asrDurationInterval = setInterval(updateASRDuration, 1000);
+                        }
+                        // Start transcript polling if not running
+                        if (!realtimeASRPollInterval) {
+                            realtimeASRPollInterval = setInterval(pollRealtimeTranscript, 2000);
+                        }
+
+                        // Immediately fetch current transcript for late-joining browsers
+                        // Use a slight delay to ensure state propagates, and force a refresh
+                        setTimeout(() => {
+                            console.log('🔄 Fetching full transcript history for sync...');
+                            pollRealtimeTranscript();
+                        }, 100);
+                    } else {
+                        // Server says recording is stopped, update UI to match
+                        isRecording = false;
+
+                        document.getElementById('asr-start-btn').innerHTML = '🎙️ Record';
+                        document.getElementById('asr-start-btn').style.background = 'linear-gradient(145deg, #27ae60, #1e8449)';
+                        document.getElementById('asr-indicator').style.background = '#ccc';
+                        document.getElementById('asr-indicator').style.animation = 'none';
+                        document.getElementById('asr-status-text').textContent = 'Stopped';
+
+                        // Clear timers
+                        if (asrDurationInterval) {
+                            clearInterval(asrDurationInterval);
+                            asrDurationInterval = null;
+                        }
+                        if (realtimeASRPollInterval) {
+                            clearInterval(realtimeASRPollInterval);
+                            realtimeASRPollInterval = null;
+                        }
+                    }
+                }
+            } catch (error) {
+                // Silently ignore sync errors to avoid console spam
+            }
+        }
+
+        // Start state sync polling (every 2 seconds)
+        asrStateSyncInterval = setInterval(syncRecordingState, 2000);
 
         // 检查 ASR 可用性
         async function checkASRAvailability() {
@@ -5060,19 +5131,34 @@
                 if (!asrAvailable) {
                     document.getElementById('asr-start-btn').disabled = true;
                     document.getElementById('asr-start-btn').style.opacity = '0.5';
-                    document.getElementById('asr-status-text').textContent = data.error || '不可用';
-                    showToast('⚠️ 实时语音识别不可用: ' + (data.error || '未知错误'), 'warning');
+                    document.getElementById('asr-status-text').textContent = data.error || 'Unavailable';
+                    showToast('⚠️ Real-time speech recognition unavailable: ' + (data.error || 'Unknown error'), 'warning');
+                } else {
+                    // Also sync state on availability check
+                    await syncRecordingState();
                 }
 
                 return asrAvailable;
             } catch (error) {
-                console.error('检查 ASR 可用性失败:', error);
+                console.error('Check ASR availability failed:', error);
                 return false;
             }
         }
 
-        // 初始化时检查
-        checkASRAvailability();
+        // 初始化时检查 - ensure DOM is ready
+        function initializeASR() {
+            // Immediate sync on page load
+            syncRecordingState();
+            checkASRAvailability();
+            console.log('🎤 ASR initialized, sync started');
+        }
+
+        // Initialize when DOM is ready, or immediately if already loaded
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeASR);
+        } else {
+            initializeASR();
+        }
 
         // 切换录音状态
         async function toggleASR() {
@@ -5106,15 +5192,10 @@
                     return;
                 }
 
-                isRecording = true;
-                asrStartTime = Date.now();
+                // Simply trigger a sync - let the sync function update the UI
+                await syncRecordingState();
 
-                // 更新 UI
-                document.getElementById('asr-start-btn').innerHTML = '⏹️ Stop';
-                document.getElementById('asr-start-btn').style.background = 'linear-gradient(145deg, #e74c3c, #c0392b)';
-                document.getElementById('asr-indicator').style.background = '#27ae60';
-                document.getElementById('asr-indicator').style.animation = 'pulse 1s infinite';
-                document.getElementById('asr-status-text').textContent = 'Recording...';
+                showToast('🎤 Speech recognition started...', 'success');
 
                 // 更新时长
                 asrDurationInterval = setInterval(updateASRDuration, 1000);
@@ -5146,26 +5227,12 @@
                 console.error('停止 ASR 错误:', error);
             }
 
-            isRecording = false;
-
-            // 更新 UI
-            document.getElementById('asr-start-btn').innerHTML = '🎙️ Record';
-            document.getElementById('asr-start-btn').style.background = 'linear-gradient(145deg, #27ae60, #1e8449)';
-            document.getElementById('asr-indicator').style.background = '#ccc';
-            document.getElementById('asr-indicator').style.animation = 'none';
-            document.getElementById('asr-status-text').textContent = 'Stopped';
+            // Let sync function handle UI updates
+            await syncRecordingState();
 
             // 清除实时文本
             document.getElementById('transcript-realtime').textContent = '';
 
-            if (asrDurationInterval) {
-                clearInterval(asrDurationInterval);
-                asrDurationInterval = null;
-            }
-            if (notesUpdateInterval) {
-                clearInterval(notesUpdateInterval);
-                notesUpdateInterval = null;
-            }
             if (realtimeASRPollInterval) {
                 clearInterval(realtimeASRPollInterval);
                 realtimeASRPollInterval = null;
@@ -5181,7 +5248,8 @@
             if (!isRecording) return;
 
             try {
-                const response = await fetch('/api/realtime_asr/transcript');
+                // Add timestamp to prevent caching
+                const response = await fetch('/api/realtime_asr/transcript?t=' + Date.now());
                 const data = await response.json();
 
                 if (!data.success) return;
@@ -5208,7 +5276,7 @@
                 } else {
                     // 正在录制但还没有任何内容
                     if (!container.innerHTML || container.innerHTML.includes('点击"开始录音"')) {
-                        container.innerHTML = `<span style="color: #999; font-style: italic;">正在监听,请说话... (片段数: ${data.segment_count || 0})</span>`;
+                        container.innerHTML = `<span style="color: #999; font-style: italic;">Listening, please speak... (Segments: ${data.segment_count || 0})</span>`;
                     }
                 }
 
@@ -5219,7 +5287,7 @@
                 document.getElementById('transcript-word-count').textContent = (data.transcript || '').length;
 
             } catch (error) {
-                console.error('获取转写结果失败:', error);
+                console.error('Failed to fetch transcript:', error);
             }
         }
 
@@ -5244,18 +5312,18 @@
             try {
                 await fetch('/api/realtime_asr/clear', { method: 'POST' });
             } catch (error) {
-                console.error('清空转写记录失败:', error);
+                console.error('Failed to clear transcript:', error);
             }
 
             document.getElementById('transcript-content').innerHTML =
-                '<span style="color: #999; font-style: italic;">点击"开始录音"按钮，语音将被实时转为文字...</span>';
+                '<span style="color: #999; font-style: italic;">Click "Record" button, speech will be converted to text in real-time...</span>';
             document.getElementById('transcript-realtime').textContent = '';
             document.getElementById('transcript-word-count').textContent = '0';
             document.getElementById('meeting-notes-content').innerHTML =
                 '<div style="color: #999; font-style: italic; text-align: center;">' +
                 '<div style="font-size: 24px; margin-bottom: 8px;">📋</div>' +
-                'AI 将根据语音内容自动生成会议纪要<br>' +
-                '<span style="font-size: 11px;">每30秒自动更新一次</span></div>';
+                'AI will auto-generate meeting notes from speech<br>' +
+                '<span style="font-size: 11px;">Auto-updates every 30 seconds</span></div>';
         }
 
         // ============================================================
@@ -5389,7 +5457,7 @@
                 container.innerHTML = `
                     <div style="text-align: center; padding: 20px; color: #999;">
                         <div style="font-size: 32px; margin-bottom: 8px;">📋</div>
-                        <div>等待内容...</div>
+                        <div>Waiting for content...</div>
                     </div>`;
                 return;
             }
@@ -5399,7 +5467,7 @@
             // 显示摘要
             if (data.summary) {
                 html += `<div style="margin-bottom: 12px; padding: 10px; background: #e8f5e9; border-radius: 6px; border-left: 3px solid #4caf50;">
-                    <div style="font-weight: bold; color: #2e7d32; margin-bottom: 4px;">📝 会议摘要</div>
+                    <div style="font-weight: bold; color: #2e7d32; margin-bottom: 4px;">📝 Meeting Summary</div>
                     <div style="font-size: 13px; color: #1b5e20;">${data.summary}</div>
                 </div>`;
             }
@@ -5407,7 +5475,7 @@
             // 显示要点
             if (data.key_points && data.key_points.length > 0) {
                 html += `<div style="margin-bottom: 12px;">
-                    <div style="font-weight: bold; color: #1976d2; margin-bottom: 6px;">📌 核心要点</div>`;
+                    <div style="font-weight: bold; color: #1976d2; margin-bottom: 6px;">📌 Key Points</div>`;
                 data.key_points.forEach((point, i) => {
                     html += `<div style="padding: 6px 10px; margin: 4px 0; background: #e3f2fd; border-radius: 4px; font-size: 12px; color: #1565c0;">
                         ${i + 1}. ${point}
@@ -5419,7 +5487,7 @@
             // 显示待办事项
             if (data.action_items && data.action_items.length > 0) {
                 html += `<div>
-                    <div style="font-weight: bold; color: #e65100; margin-bottom: 6px;">✅ 待办事项</div>`;
+                    <div style="font-weight: bold; color: #e65100; margin-bottom: 6px;">✅ Action Items</div>`;
                 data.action_items.forEach((item, i) => {
                     html += `<div style="padding: 6px 10px; margin: 4px 0; background: #fff3e0; border-radius: 4px; font-size: 12px; color: #e65100;">
                         ${i + 1}. ${item}
@@ -5453,7 +5521,7 @@
                                     border-radius: 6px; cursor: pointer; user-select: none;
                                     font-weight: 600; color: #555; font-size: 13px;
                                     border: 1px solid #ddd; margin-bottom: 8px;">
-                    📋 历史记录 (${historyCount}条) <span style="float: right; font-size: 11px;">▼ 点击展开</span>
+                    📋 History (${historyCount}) <span style="float: right; font-size: 11px;">▼ Click to expand</span>
                 </div>`;
 
                 html += `<div style="display: none; max-height: 300px; overflow-y: auto;">`;
@@ -5472,7 +5540,7 @@
                             <div style="margin-bottom: 12px; padding: 8px; background: linear-gradient(135deg, #fff3cd, #ffeaa7); 
                                         border: 2px solid #f39c12; border-radius: 6px;">
                                 <div style="font-size: 11px; color: #856404; font-weight: bold; margin-bottom: 4px;">
-                                    🔖 分析框架标签
+                                    🔖 Framework Tags
                                 </div>
                                 <div style="font-size: 13px; color: #d4850a; font-weight: bold;">
                                     ${h.ai_framework_tags}
@@ -5488,13 +5556,13 @@
                         ` : ''}
                         
                         <div style="font-size: 13px; line-height: 1.6; color: #2c3e50; margin-bottom: 12px;">
-                            ${h.ai_description || h.user_note || '无描述'}
+                            ${h.ai_description || h.user_note || 'No description'}
                         </div>
                         
                         ${h.ai_tags && h.ai_tags.length > 0 ? `
                             <div style="margin-top: 8px;">` : ''}
                         <div style="font-size: 12px; color: #333; font-weight: 500; margin-bottom: 4px;">
-                            ${h.summary || '无摘要'}
+                            ${h.summary || 'No summary'}
                         </div>`;
 
                     // 显示精简的要点
@@ -5504,7 +5572,7 @@
                             html += `<div style="margin: 2px 0;">• ${pt}</div>`;
                         });
                         if (h.key_points.length > 2) {
-                            html += `<div style="color: #999; font-style: italic;">...还有${h.key_points.length - 2}条</div>`;
+                            html += `<div style="color: #999; font-style: italic;">...and ${h.key_points.length - 2} more</div>`;
                         }
                         html += `</div>`;
                     }
@@ -5528,7 +5596,7 @@
             // 核心要点（简洁列表）
             if (notes.key_points && notes.key_points.length > 0) {
                 html += `<div style="margin-bottom: 10px;">
-                    <div style="font-weight: bold; color: #1976d2; font-size: 12px; margin-bottom: 6px;">📌 核心要点</div>`;
+                    <div style="font-weight: bold; color: #1976d2; font-size: 12px; margin-bottom: 6px;">📌 Key Points</div>`;
                 notes.key_points.forEach((point, i) => {
                     html += `<div style="padding: 4px 8px; margin: 3px 0; background: #e3f2fd; border-radius: 4px; 
                                 font-size: 12px; color: #1565c0;">${i + 1}. ${point}</div>`;
@@ -5540,7 +5608,7 @@
             if (notes.action_items && notes.action_items.length > 0 &&
                 !(notes.action_items.length === 1 && !notes.action_items[0])) {
                 html += `<div style="margin-bottom: 10px;">
-                    <div style="font-weight: bold; color: #e65100; font-size: 12px; margin-bottom: 6px;">✅ 待办</div>`;
+                    <div style="font-weight: bold; color: #e65100; font-size: 12px; margin-bottom: 6px;">✅ Action Items</div>`;
                 notes.action_items.forEach(item => {
                     const text = typeof item === 'object' ? item.item : item;
                     if (text) {
@@ -5555,7 +5623,7 @@
             if (notes.decisions && notes.decisions.length > 0 &&
                 !(notes.decisions.length === 1 && !notes.decisions[0])) {
                 html += `<div style="margin-bottom: 10px;">
-                    <div style="font-weight: bold; color: #7b1fa2; font-size: 12px; margin-bottom: 6px;">🔔 决策</div>`;
+                    <div style="font-weight: bold; color: #7b1fa2; font-size: 12px; margin-bottom: 6px;">🔔 Decisions</div>`;
                 notes.decisions.forEach(decision => {
                     if (decision) {
                         html += `<div style="padding: 4px 8px; margin: 3px 0; background: #f3e5f5; border-radius: 4px; 
@@ -5568,7 +5636,7 @@
             if (!html) {
                 html = `<div style="color: #666; text-align: center; padding: 20px;">
                     <div style="font-size: 28px; margin-bottom: 8px;">📝</div>
-                    <div style="font-size: 12px;">等待内容生成...</div>
+                    <div style="font-size: 12px;">Waiting for content...</div>
                 </div>`;
             }
 
@@ -5916,7 +5984,7 @@
         }
 
         console.log('🎨 Integrated System - Retro Style UI Loaded');
-        console.log('🎯 快捷键: Space=标记 | R=刷新 | N=生成叙事 | M=录音');
+        console.log('🎯 Hotkeys: Space=Mark | R=Refresh | N=Generate Narrative | M=Record');
         // ============================================================
         // 🎬 AI直播间功能
         // ============================================================
@@ -6258,11 +6326,11 @@
             header.style.justifyContent = 'space-between';
             header.style.padding = '8px 10px';
             header.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
-            header.innerHTML = `<div style="font-weight:700;">📜 分析日志</div>`;
+            header.innerHTML = `<div style="font-weight:700;">📜 Analysis Log</div>`;
 
             const btns = document.createElement('div');
             const refreshBtn = document.createElement('button');
-            refreshBtn.textContent = '刷新';
+            refreshBtn.textContent = 'Refresh';
             refreshBtn.style.marginRight = '8px';
             refreshBtn.style.padding = '4px 8px';
             refreshBtn.style.border = '1px solid rgba(255,255,255,0.2)';
@@ -6272,7 +6340,7 @@
             refreshBtn.style.cursor = 'pointer';
 
             const toggleBtn = document.createElement('button');
-            toggleBtn.textContent = '折叠';
+            toggleBtn.textContent = 'Collapse';
             toggleBtn.style.padding = '4px 8px';
             toggleBtn.style.border = '1px solid rgba(255,255,255,0.2)';
             toggleBtn.style.background = 'rgba(255,255,255,0.08)';
@@ -6294,7 +6362,7 @@
             pre.style.margin = '0';
             pre.style.whiteSpace = 'pre-wrap';
             pre.style.wordBreak = 'break-word';
-            pre.textContent = '加载中...';
+            pre.textContent = 'Loading...';
 
             body.appendChild(pre);
             wrap.appendChild(header);
@@ -6307,12 +6375,12 @@
                     const data = await res.json();
                     const lines = Array.isArray(data.lines) ? data.lines : [];
                     if (!lines.length) {
-                        pre.textContent = '暂无分析日志';
+                        pre.textContent = 'No analysis logs';
                     } else {
                         pre.textContent = lines.join('\n');
                     }
                 } catch (err) {
-                    pre.textContent = `读取日志失败: ${err}`;
+                    pre.textContent = `Failed to load log: ${err}`;
                 }
             }
 
@@ -6320,11 +6388,11 @@
             toggleBtn.onclick = () => {
                 if (body.style.display === 'none') {
                     body.style.display = 'block';
-                    toggleBtn.textContent = '折叠';
+                    toggleBtn.textContent = 'Collapse';
                     wrap.style.maxHeight = '220px';
                 } else {
                     body.style.display = 'none';
-                    toggleBtn.textContent = '展开';
+                    toggleBtn.textContent = 'Expand';
                     wrap.style.maxHeight = '40px';
                 }
             };

@@ -4005,7 +4005,7 @@
                     dot.style.left = `${axisX - size / 2}px`;
                     dot.style.top = `${y}px`;
                     const key = String(g?.key || '').trim();
-                    const hint = g?.hasUser ? '含User标记' : '仅AI';
+                    const hint = g?.hasUser ? 'User Marked' : 'AI Only';
                     dot.title = `20分钟聚合点：${key || '—'} | ${count}条 | ${hint}`;
                     box.appendChild(dot);
                 }
@@ -4744,7 +4744,7 @@
                 }, 10);
 
                 // 显示提示
-                showToast(`🔥 重要性 +${markPressCount}（${MARK_WINDOW_MS / 1000}秒内重复标记会合并）`, 'info');
+                showToast(`🔥 Importance +${markPressCount} (Merged if repeated within ${MARK_WINDOW_MS / 1000}s)`, 'info');
 
                 // 清除之前的定时器
                 if (markDebounceTimer) {
@@ -4809,12 +4809,12 @@
                         // 重置计数
                         markPressCount = 0;
                     } else {
-                        showToast(`❌ 标记失败: ${data.error}`, 'error');
+                        showToast(`❌ Mark failed: ${data.error}`, 'error');
                     }
                 })
                 .catch(error => {
                     console.error('Error marking moment:', error);
-                    showToast('❌ 标记失败: 网络错误', 'error');
+                    showToast('❌ Mark failed: Network error', 'error');
                 });
 
             // 视觉反馈 - 灯光特效
@@ -4955,7 +4955,7 @@
                         <div style="padding: 16px; font-family: 'VT323', monospace;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <span style="font-size: 18px; font-weight: bold;">
-                                    ${isUserAnchor ? '🔴 用户标记' : '🤖 AI识别'}
+                                    ${isUserAnchor ? '🔴 User Mark' : '🤖 AI Detected'}
                                     ${moment.video_url ? ' 📹' : ''}
                                 </span>
                                 <span style="color: #666;">${moment.time_str}</span>
@@ -5457,7 +5457,7 @@
                 container.innerHTML = `
                     <div style="text-align: center; padding: 20px; color: #999;">
                         <div style="font-size: 32px; margin-bottom: 8px;">📋</div>
-                        <div>等待内容...</div>
+                        <div>Waiting for content...</div>
                     </div>`;
                 return;
             }
@@ -5467,7 +5467,7 @@
             // 显示摘要
             if (data.summary) {
                 html += `<div style="margin-bottom: 12px; padding: 10px; background: #e8f5e9; border-radius: 6px; border-left: 3px solid #4caf50;">
-                    <div style="font-weight: bold; color: #2e7d32; margin-bottom: 4px;">📝 会议摘要</div>
+                    <div style="font-weight: bold; color: #2e7d32; margin-bottom: 4px;">📝 Meeting Summary</div>
                     <div style="font-size: 13px; color: #1b5e20;">${data.summary}</div>
                 </div>`;
             }
@@ -5475,7 +5475,7 @@
             // 显示要点
             if (data.key_points && data.key_points.length > 0) {
                 html += `<div style="margin-bottom: 12px;">
-                    <div style="font-weight: bold; color: #1976d2; margin-bottom: 6px;">📌 核心要点</div>`;
+                    <div style="font-weight: bold; color: #1976d2; margin-bottom: 6px;">📌 Key Points</div>`;
                 data.key_points.forEach((point, i) => {
                     html += `<div style="padding: 6px 10px; margin: 4px 0; background: #e3f2fd; border-radius: 4px; font-size: 12px; color: #1565c0;">
                         ${i + 1}. ${point}
@@ -5487,7 +5487,7 @@
             // 显示待办事项
             if (data.action_items && data.action_items.length > 0) {
                 html += `<div>
-                    <div style="font-weight: bold; color: #e65100; margin-bottom: 6px;">✅ 待办事项</div>`;
+                    <div style="font-weight: bold; color: #e65100; margin-bottom: 6px;">✅ Action Items</div>`;
                 data.action_items.forEach((item, i) => {
                     html += `<div style="padding: 6px 10px; margin: 4px 0; background: #fff3e0; border-radius: 4px; font-size: 12px; color: #e65100;">
                         ${i + 1}. ${item}
@@ -5521,7 +5521,7 @@
                                     border-radius: 6px; cursor: pointer; user-select: none;
                                     font-weight: 600; color: #555; font-size: 13px;
                                     border: 1px solid #ddd; margin-bottom: 8px;">
-                    📋 历史记录 (${historyCount}条) <span style="float: right; font-size: 11px;">▼ 点击展开</span>
+                    📋 History (${historyCount}) <span style="float: right; font-size: 11px;">▼ Click to expand</span>
                 </div>`;
 
                 html += `<div style="display: none; max-height: 300px; overflow-y: auto;">`;
@@ -5540,7 +5540,7 @@
                             <div style="margin-bottom: 12px; padding: 8px; background: linear-gradient(135deg, #fff3cd, #ffeaa7); 
                                         border: 2px solid #f39c12; border-radius: 6px;">
                                 <div style="font-size: 11px; color: #856404; font-weight: bold; margin-bottom: 4px;">
-                                    🔖 分析框架标签
+                                    🔖 Framework Tags
                                 </div>
                                 <div style="font-size: 13px; color: #d4850a; font-weight: bold;">
                                     ${h.ai_framework_tags}
@@ -5556,13 +5556,13 @@
                         ` : ''}
                         
                         <div style="font-size: 13px; line-height: 1.6; color: #2c3e50; margin-bottom: 12px;">
-                            ${h.ai_description || h.user_note || '无描述'}
+                            ${h.ai_description || h.user_note || 'No description'}
                         </div>
                         
                         ${h.ai_tags && h.ai_tags.length > 0 ? `
                             <div style="margin-top: 8px;">` : ''}
                         <div style="font-size: 12px; color: #333; font-weight: 500; margin-bottom: 4px;">
-                            ${h.summary || '无摘要'}
+                            ${h.summary || 'No summary'}
                         </div>`;
 
                     // 显示精简的要点
@@ -5572,7 +5572,7 @@
                             html += `<div style="margin: 2px 0;">• ${pt}</div>`;
                         });
                         if (h.key_points.length > 2) {
-                            html += `<div style="color: #999; font-style: italic;">...还有${h.key_points.length - 2}条</div>`;
+                            html += `<div style="color: #999; font-style: italic;">...and ${h.key_points.length - 2} more</div>`;
                         }
                         html += `</div>`;
                     }
@@ -5596,7 +5596,7 @@
             // 核心要点（简洁列表）
             if (notes.key_points && notes.key_points.length > 0) {
                 html += `<div style="margin-bottom: 10px;">
-                    <div style="font-weight: bold; color: #1976d2; font-size: 12px; margin-bottom: 6px;">📌 核心要点</div>`;
+                    <div style="font-weight: bold; color: #1976d2; font-size: 12px; margin-bottom: 6px;">📌 Key Points</div>`;
                 notes.key_points.forEach((point, i) => {
                     html += `<div style="padding: 4px 8px; margin: 3px 0; background: #e3f2fd; border-radius: 4px; 
                                 font-size: 12px; color: #1565c0;">${i + 1}. ${point}</div>`;
@@ -5608,7 +5608,7 @@
             if (notes.action_items && notes.action_items.length > 0 &&
                 !(notes.action_items.length === 1 && !notes.action_items[0])) {
                 html += `<div style="margin-bottom: 10px;">
-                    <div style="font-weight: bold; color: #e65100; font-size: 12px; margin-bottom: 6px;">✅ 待办</div>`;
+                    <div style="font-weight: bold; color: #e65100; font-size: 12px; margin-bottom: 6px;">✅ Action Items</div>`;
                 notes.action_items.forEach(item => {
                     const text = typeof item === 'object' ? item.item : item;
                     if (text) {
@@ -5623,7 +5623,7 @@
             if (notes.decisions && notes.decisions.length > 0 &&
                 !(notes.decisions.length === 1 && !notes.decisions[0])) {
                 html += `<div style="margin-bottom: 10px;">
-                    <div style="font-weight: bold; color: #7b1fa2; font-size: 12px; margin-bottom: 6px;">🔔 决策</div>`;
+                    <div style="font-weight: bold; color: #7b1fa2; font-size: 12px; margin-bottom: 6px;">🔔 Decisions</div>`;
                 notes.decisions.forEach(decision => {
                     if (decision) {
                         html += `<div style="padding: 4px 8px; margin: 3px 0; background: #f3e5f5; border-radius: 4px; 
@@ -5636,7 +5636,7 @@
             if (!html) {
                 html = `<div style="color: #666; text-align: center; padding: 20px;">
                     <div style="font-size: 28px; margin-bottom: 8px;">📝</div>
-                    <div style="font-size: 12px;">等待内容生成...</div>
+                    <div style="font-size: 12px;">Waiting for content...</div>
                 </div>`;
             }
 
@@ -5984,7 +5984,7 @@
         }
 
         console.log('🎨 Integrated System - Retro Style UI Loaded');
-        console.log('🎯 快捷键: Space=标记 | R=刷新 | N=生成叙事 | M=录音');
+        console.log('🎯 Hotkeys: Space=Mark | R=Refresh | N=Generate Narrative | M=Record');
         // ============================================================
         // 🎬 AI直播间功能
         // ============================================================
@@ -6326,11 +6326,11 @@
             header.style.justifyContent = 'space-between';
             header.style.padding = '8px 10px';
             header.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
-            header.innerHTML = `<div style="font-weight:700;">📜 分析日志</div>`;
+            header.innerHTML = `<div style="font-weight:700;">📜 Analysis Log</div>`;
 
             const btns = document.createElement('div');
             const refreshBtn = document.createElement('button');
-            refreshBtn.textContent = '刷新';
+            refreshBtn.textContent = 'Refresh';
             refreshBtn.style.marginRight = '8px';
             refreshBtn.style.padding = '4px 8px';
             refreshBtn.style.border = '1px solid rgba(255,255,255,0.2)';
@@ -6340,7 +6340,7 @@
             refreshBtn.style.cursor = 'pointer';
 
             const toggleBtn = document.createElement('button');
-            toggleBtn.textContent = '折叠';
+            toggleBtn.textContent = 'Collapse';
             toggleBtn.style.padding = '4px 8px';
             toggleBtn.style.border = '1px solid rgba(255,255,255,0.2)';
             toggleBtn.style.background = 'rgba(255,255,255,0.08)';
@@ -6362,7 +6362,7 @@
             pre.style.margin = '0';
             pre.style.whiteSpace = 'pre-wrap';
             pre.style.wordBreak = 'break-word';
-            pre.textContent = '加载中...';
+            pre.textContent = 'Loading...';
 
             body.appendChild(pre);
             wrap.appendChild(header);
@@ -6380,7 +6380,7 @@
                         pre.textContent = lines.join('\n');
                     }
                 } catch (err) {
-                    pre.textContent = `读取日志失败: ${err}`;
+                    pre.textContent = `Failed to load log: ${err}`;
                 }
             }
 
@@ -6388,11 +6388,11 @@
             toggleBtn.onclick = () => {
                 if (body.style.display === 'none') {
                     body.style.display = 'block';
-                    toggleBtn.textContent = '折叠';
+                    toggleBtn.textContent = 'Collapse';
                     wrap.style.maxHeight = '220px';
                 } else {
                     body.style.display = 'none';
-                    toggleBtn.textContent = '展开';
+                    toggleBtn.textContent = 'Expand';
                     wrap.style.maxHeight = '40px';
                 }
             };
