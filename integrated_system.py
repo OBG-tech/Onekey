@@ -1165,13 +1165,13 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if key_moments_manager is None:
             return {"moments": [], "count": 0, "error": "Key moments manager not initialized"}
         
-        # �0�1�1�5 Safety: If empty, try to reload from disk
+        # Safety: 如果 moments 为空，则尝试从磁盘重新加载
         if not key_moments_manager.moments:
             try:
-                print("�7�2�1�5 Key moments list empty, attempting reload from disk...")
+                print("⚠️ Key moments list empty, attempting reload from disk...")
                 key_moments_manager._load_moments()
             except Exception as e:
-                print(f"�7�4 Failed to reload moments: {e}")
+                print(f"❌ Failed to reload moments: {e}")
 
         moments = key_moments_manager.get_moments()
         

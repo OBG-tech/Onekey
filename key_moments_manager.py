@@ -124,6 +124,63 @@ class KeyMoment:
 class KeyMomentsManager:
     """鍙岃建鍏抽敭鏃跺埢绠＄悊鍣?"""
 
+    def _rebuild_moments_index_from_dir(self) -> int:
+        """从 key_moments 目录重建 moments.json（兜底）。
+
+        触发条件：moments.json 不存在、为空、或 moments 列表为空但目录中存在 anchor_* 文件。
+
+        返回：重建写入的 moments 数量。
+        """
+        try:
+            km_dir = self.moments_dir
+            if not km_dir.exists():
+                return 0
+
+            # 约定文件名：anchor_<unix>_<rand>.jpg/mp4/context.txt
+            jpgs = sorted(km_dir.glob("anchor_*.jpg"))
+            if not jpgs:
+                return 0
+
+            rebuilt: List[KeyMoment] = []
+            for jpg in jpgs:
+                stem = jpg.stem  # anchor_....
+                # 尽量同时绑定 mp4（可选）
+                mp4 = km_dir / f"{stem}.mp4"
+
+                ts = 0.0
+                frame_num = 0
+                try:
+                    parts = stem.split("_")
+                    # anchor, unix, rand
+                    if len(parts) >= 3:
+                        ts = float(parts[1])
+                        # history moment 的 frame_number 不一定可得，保持 0
+                except Exception:
+                    ts = 0.0
+
+                moment = KeyMoment(
+                    id=stem,
+                    timestamp=ts,
+                    frame_number=frame_num,
+                    source=MomentSource.USER_ANCHOR.value,
+                    frame_path=str(jpg),
+                    video_path=str(mp4) if mp4.exists() else "",
+                )
+                rebuilt.append(moment)
+
+            # 基于文件系统重建 stats
+            self.moments = rebuilt
+            self.stats["total_moments"] = len(rebuilt)
+            # 不强行判断 ai_detected/user_anchors；先把 total 拉起来，避免 UI 空白
+            self.stats["user_anchors"] = max(int(self.stats.get("user_anchors", 0)), len(rebuilt))
+
+            self._save_moments()
+            print(f"🛠️ 已从目录重建 moments.json: {len(rebuilt)} 条")
+            return len(rebuilt)
+        except Exception as e:
+            print(f"⚠️ 重建 moments 索引失败: {e}")
+            return 0
+
     def _try_load_env_file(self) -> None:
         """Best-effort load env vars from `.env.local`/`.env`.
 
@@ -271,43 +328,43 @@ class KeyMomentsManager:
         # 鎸夋渶楂樺彲鑳紽PS(60)璁＄畻锛岀‘淇滷PS娉㈠姩鏃朵粛鑳借?嗙洊120绉?
         self.buffer_fps = 60.0
         self.buffer_max_frames = int(self.buffer_max_seconds * self.buffer_fps)
-        print(f"   馃敡 [BUFFER] Config: max_seconds={self.buffer_max_seconds}, fps={self.buffer_fps}, max_frames={self.buffer_max_frames}, format=JPEG")
+        print(f"   🧠 [BUFFER] Config: max_seconds={self.buffer_max_seconds}, fps={self.buffer_fps}, max_frames={self.buffer_max_frames}, format=JPEG")
         self.buffer_lock = threading.Lock()
         
         # 馃攰 闊抽?戠紦鍐插尯 (鐢ㄤ簬褰曞埗瀵瑰簲鐨勯煶棰戠墖娈?)
         self.audio_buffer: list = []      # 瀛樺偍 (audio_chunk, timestamp) 鍏冪粍
         self.audio_buffer_lock = threading.Lock()
         
-        # AI 鍒嗘瀽閰嶇疆
+        # AI 分析配置
         self.ai_interval_seconds = 210  # 3.5鍒嗛挓涓�娆″垏鐗?
         self.last_ai_analysis_time: float = 0
         self.ai_analysis_buffer: List[tuple] = []  # (frame, frame_num, timestamp)
         
-        # 缁熻?? (蹇呴』鍦ㄥ姞杞藉巻鍙叉暟鎹?鍓嶅垵濮嬪寲)
+        # 统计信息（必须在加载历史数据前初始化）
         self.stats = {
             "user_anchors": 0,
             "ai_detected": 0,
             "total_moments": 0
         }
         
-        # 鍔犺浇鍘嗗彶鏁版嵁
+    # 加载历史数据
         self._load_moments()
         
-        # 绠�鍖栧垵濮嬪寲鏃ュ織
-        audio_status = "鉂? 鏃犻煶棰?"
+        # 简化初始化日志
+        audio_status = "❌ 无音频"
         if self.microphone_recorder:
-            audio_status = "鉁? 绯荤粺楹﹀厠椋?"
+            audio_status = "✅ 系统麦克风"
         elif self.audio_source:
-            audio_status = f"鉁? 鏂囦欢闊抽??"
+            audio_status = "✅ 文件音频"
         
-        print("馃幆 鍏抽敭鏃跺埢绠＄悊鍣ㄥ凡鍚?鍔?")
-        print(f"   馃搧 瀛樺偍: {self.moments_dir.name}")
-        print(f"   馃帳 闊抽??: {audio_status}")
+        print("🎬 KeyMomentsManager 已启动")
+        print(f"   📁 存储: {self.moments_dir}")
+        print(f"   🎧 音频: {audio_status}")
         if self.qwen_available:
             provider_label = "Claude Haiku 4.5" if self.llm_provider.startswith("claude") else "Qwen"
-            print(f"   馃?? AI鍒嗘瀽: 宸插惎鐢? ({provider_label}, model={self.text_model})")
+            print(f"   🤖 AI分析: 已启用 ({provider_label}, model={self.text_model})")
         else:
-            print("   馃?? AI鍒嗘瀽: 鏈?閰嶇疆 LLM API Key")
+            print("   🤖 AI分析: 未配置 LLM API Key")
             
         try:
             with open("debug_startup.log", "a") as f:
@@ -321,7 +378,7 @@ class KeyMomentsManager:
             print(f"Failed to write debug log: {e}")
     
     def _load_moments(self):
-        """鍔犺浇鍘嗗彶鍏抽敭鏃跺埢"""
+        """加载历史关键时刻"""
         moments_file = self.moments_dir / "moments.json"
         if moments_file.exists():
             try:
@@ -329,6 +386,10 @@ class KeyMomentsManager:
                     data = json.load(f)
                     self.moments = [KeyMoment(**m) for m in data.get('moments', [])]
                     self.stats = data.get('stats', self.stats)
+
+                # 兜底：如果 JSON 里 moments 为空，但目录里有实际文件，则自动重建
+                if not self.moments:
+                    self._rebuild_moments_index_from_dir()
 
                 # 杞婚噺杩佺Щ锛氬巻鍙叉暟鎹?閲屾湁浜? moment 鐨? ai_description 鏄?鈥滅煭鏍囩?锯�?(<=14瀛?)锛?
                 # 浣? analysis 涓?鍖呭惈鈥滆?︾粏鎻忚堪锛氣�︹�濓紝浼氬?艰嚧鍗＄墖淇℃伅瀵嗗害涓嬮檷銆傝繖閲岃嚜鍔ㄦ彁鍗囦竴娆°�?
@@ -382,12 +443,17 @@ class KeyMomentsManager:
                         tags_updated = True
                 
                 if tags_updated:
-                    print(f"   馃彿锔? 涓哄巻鍙叉暟鎹?琛ュ厖浜唗ags")
+                    print("   🏷️ 为历史数据补充了 tags")
                     self._save_moments()
                 
                 # print(f"   宸插姞杞? {len(self.moments)} 涓?鍘嗗彶鍏抽敭鏃跺埢")
             except Exception as e:
                 print(f"   鈿狅笍 鍔犺浇鍘嗗彶鏁版嵁澶辫触: {e}")
+                # JSON 读取/解析失败，也尝试从目录重建一次
+                self._rebuild_moments_index_from_dir()
+        else:
+            # moments.json 不存在时，尝试从目录重建
+            self._rebuild_moments_index_from_dir()
     
     def _save_moments(self):
         """淇濆瓨鍏抽敭鏃跺埢鍒版枃浠?"""
@@ -404,7 +470,7 @@ class KeyMomentsManager:
             }
             with open(moments_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-            print(f"馃敡 [DEBUG] Save complete.")
+            print("🧾 [DEBUG] Save complete.")
         except Exception as e:
             print(f"鈿狅笍 淇濆瓨鍏抽敭鏃跺埢澶辫触: {e}")
             import traceback
@@ -497,7 +563,7 @@ class KeyMomentsManager:
             if len(txt) > mx:
                 txt = txt[:mx] + f"\n... (truncated, {len(content)} chars total; set LLM_TRACE_FULL=1 to print all)"
         print("\n" + ("=" * 88))
-        print(f"馃Ь LLM TRACE | {title}")
+        print(f"🧪 LLM TRACE | {title}")
         print("-" * 88)
         print(txt)
         print(("=" * 88) + "\n")
@@ -1038,7 +1104,7 @@ class KeyMomentsManager:
         self.last_ai_analysis_time = 0
         self.ai_analysis_buffer = []
         self.stats = {"user_anchors": 0, "ai_detected": 0, "total_moments": 0}
-        print("馃攧 鍏抽敭鏃跺埢绠＄悊鍣ㄤ細璇濆凡閲嶇疆")
+    print("🔄 KeyMomentsManager 会话已重置")
 
     def delete_frame_from_timeline(self, person_id: int, frame_num: int):
         """鍒犻櫎 timeline 涓?鐨勭壒瀹氬抚
@@ -1103,7 +1169,7 @@ class KeyMomentsManager:
             # 淇濇寔缂撳啿鍖哄ぇ灏忓湪闄愬埗鍐?
             while len(self.frame_buffer) > self.buffer_max_frames:
                 if len(self.frame_buffer) % 500 == 0:
-                     print(f"   馃敡 [BUFFER] Popping frame! Size={len(self.frame_buffer)}, Max={self.buffer_max_frames}")
+                     print(f"   🧠 [BUFFER] Popping frame! Size={len(self.frame_buffer)}, Max={self.buffer_max_frames}")
                 self.frame_buffer.pop(0)
     
     def add_audio_frame_to_buffer(self, audio_chunk: bytes, timestamp: float = None):
@@ -1140,7 +1206,7 @@ class KeyMomentsManager:
 
         # 浼樺厛浣跨敤楹﹀厠椋庡綍鍒剁殑闊抽??
         if self.microphone_recorder:
-            print(f"   馃帳 浠庨害鍏嬮?庝繚瀛橀煶棰?...")
+            print("   🎤 从麦克风保存音频...")
             # 涓洪伩鍏嶆埅鏂?锛屽彇 ceil + 1 绉?
             fallback_seconds = int(math.ceil(float(video_duration))) + 1
 
@@ -1165,13 +1231,13 @@ class KeyMomentsManager:
                 print(f"   鈿狅笍 楹﹀厠椋庨煶棰戜繚瀛樺け璐ワ紝璺宠繃璇?闊宠浆鏂囧瓧")
         # 鍚﹀垯浠庤?嗛?戞簮鎻愬彇闊抽??
         elif self.audio_source and Path(self.audio_source).exists():
-            print(f"   馃攰 浠庤?嗛?戞簮鎻愬彇闊抽??...")
+            print("   🎧 从视频源提取音频...")
             self._extract_and_merge_audio_async(moment_id, video_path, frame_number, video_duration, frame)
         else:
             print(f"   鈿狅笍 鏃犲彲鐢ㄩ煶棰戞簮 (楹﹀厠椋?: {bool(self.microphone_recorder)}, 瑙嗛?戞簮: {self.audio_source})")
             print(f"   鈩癸笍 瑙嗛?戝皢鍙?鍖呭惈鐢婚潰锛岃??闊宠浆鏂囧瓧鍔熻兘涓嶅彲鐢?")
             # 鍗充娇鏃犻煶棰戯紝涔熷簲瑙﹀彂绾?瑙嗚?堿I鍒嗘瀽 / 妯℃嫙鎸夐敭鍚庣殑澶勭悊
-            print(f"   馃?? 瑙﹀彂鏃犻煶棰戞ā寮忕殑AI鍒嗘瀽...")
+            print("   🤖 触发无音频模式的 AI 分析...")
             if frame is not None:
                 # 鏀惧湪鍚庡彴绾跨▼閬垮厤闃诲??
                 threading.Thread(
@@ -1189,7 +1255,7 @@ class KeyMomentsManager:
                 temp_video = Path(video_path).parent / f"{moment_id}_temp.mp4"
                 Path(video_path).rename(temp_video)
                 
-                print(f"   馃敡 [DEBUG] 鍚堝苟鍛戒护:")
+                print("   🧾 [DEBUG] 合并命令:")
                 print(f"      瑙嗛??: {temp_video}")
                 print(f"      闊抽??: {audio_path}")
                 print(f"      杈撳嚭: {video_path}")
@@ -1211,7 +1277,7 @@ class KeyMomentsManager:
                     cmd += ['-af', f"apad=pad_dur={max(0.1, duration):.3f}", '-t', f"{duration:.3f}"]
                 cmd += ['-movflags', '+faststart', str(video_path)]
                 
-                print(f"   馃敡 [DEBUG] FFmpeg鍛戒护: {' '.join(cmd)}")
+                print(f"   🧾 [DEBUG] FFmpeg命令: {' '.join(cmd)}")
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 
                 if result.returncode == 0:
