@@ -3000,6 +3000,19 @@
             return (m ? m[1] : oneLine).trim();
         };
 
+        // 提取一行（第一句）用于卡片展示，优先返回以句号/感叹/问号结尾的第一句
+        const _extractOneSentence = (s) => {
+            const text = String(s || '').trim();
+            if (!text) return '';
+            // 先按换行分割，取第一行作为兜底
+            const lines = text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+            const joined = lines.join(' ');
+            const m = joined.match(/^(.*?[。！？!?\.]+)/);
+            if (m && m[1]) return m[1].trim();
+            // 若无明显标点，则截取前120字符作为一行摘要
+            return joined.length > 120 ? joined.slice(0, 117).trim() + '...' : joined;
+        };
+
         const _pickCardPrefix = (m, isUserAnchor) => {
             const imp = Number(m?.ai_importance || 0);
             const heat = imp >= 0.85 ? '🔥' : (imp >= 0.65 ? '⚡️' : '🎯');
@@ -3008,42 +3021,38 @@
         };
 
         const _buildCardSummary = (m, isUserAnchor) => {
-            // 1) 优先使用后端 ai_tagline（短、适合卡片）
+            // 1) 优先使用后端 ai_tagline
             const tagline = (m?.ai_tagline || '').trim();
-            // 2) 再从 analysis/ai_description 抽取“详细描述”并压缩
+            // 2) 从 analysis/ai_description 抽取“详细描述”
             const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
             const detail = _extractDetailFromText(sourceText);
+            // 3) AI 总结（一句话）
+            const summaryRaw = (m?.ai_summary || '').trim();
+            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+            
             const userNote = (m?.user_note || '').trim();
             let core = '';
+
             if (isUserAnchor) {
-                // 手动高光：先给“你按键时写的备注”，再补充AI提炼（如果有）
+                // 手动高光：备注优先
                 const note = userNote;
                 const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
-                // 备注如果像一整段口播/转写，就不要整段塞进卡片
                 core = noteLooksLikeTranscript ? '' : note;
-                if (core && core.length > 90) core = _shorten(core, 90);
-                const extra = tagline || detail;
+                
+                // 补充信息：Summary > Tagline > Detail
+                const extra = summary || tagline || detail;
                 if (extra && extra !== core) {
                     core = core ? `${core} · ${extra}` : extra;
                 }
             } else {
-                core = tagline || detail;
+                // 非手动高光：Summary > Tagline > Detail
+                core = summary || tagline || detail || '';
             }
+            
             if (!core) return '';
 
-            // 卡片摘要：适合扫读（增加长度以显示更多细节）
-            core = _shorten(core, 200);  // 从140增加到200字符
-
-            const prefix = _pickCardPrefix(m, isUserAnchor);
-            let out = core;
-            if (!out.startsWith('🏁') && !out.startsWith('🤖') && !out.startsWith('🎯') && !out.startsWith('⚡️') && !out.startsWith('🔥')) {
-                out = prefix + out;
-            }
-            // 如果整句没表情，补一个
-            if (!_hasEmoji(out)) {
-                out = (isUserAnchor ? '🛠️ ' : '🎬 ') + out;
-            }
-            return out;
+            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+            return _shorten(core, 30);
         };
 
         // 显示关键时刻详情
@@ -3638,38 +3647,31 @@
                         });
 
                         const _buildCardSummary = (m, isUserAnchor) => {
-                            const ts = Number(m?.timestamp);
-                            const btnMatch = Number.isFinite(ts) ? findMatchingButton(ts) : null;
+                            // 保持与全局 _buildCardSummary 一致的逻辑
+                            const tagline = (m?.ai_tagline || '').trim();
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
 
-                            // 不再添加前缀，直接显示AI生成的内容
-                            let parts = [];
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
 
-                            // 优先使用 AI 生成的卡片摘要（20-30字的详细版本）
-                            const aiDesc = (m.ai_description || '').trim();
-                            if (aiDesc) {
-                                parts.push(aiDesc.split('\n')[0]);
-                                return parts.join('');
-                            }
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
 
-                            // 回退到标签（较短的版本）
-                            const tagline = (m.ai_tagline || '').trim();
-                            if (tagline) {
-                                parts.push(tagline);
-                                return parts.join('');
-                            }
-
-                            // 再回退到用户备注或转录文本
-                            const note = (m.user_note || '').trim();
-                            const transcript = (m.transcript || '').trim();
-                            if (note) {
-                                parts.push(note);
-                            } else if (transcript) {
-                                parts.push(transcript.slice(0, 60));
+                                const extra = summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
                             } else {
-                                parts.push('(无描述)');
+                                core = summary || tagline || detail || '';
                             }
 
-                            return parts.join('');
+                            if (!core) return '';
+                            return _shorten(core, 30);
                         };
                         allMomentsList = sorted;
                         window.allMoments = sorted;

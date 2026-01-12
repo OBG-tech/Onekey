@@ -740,6 +740,16 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         
         elif self.path == '/api/meeting_notes/current':
             self.send_json_response(self._get_current_meeting_notes())
+
+        # 🎙️ AI直播间 API（GET 也支持，便于浏览器/轮询）
+        elif self.path == '/api/ai_live/status':
+            self._handle_ai_live_status()
+        elif self.path == '/api/ai_live/start':
+            self._handle_ai_live_start()
+        elif self.path == '/api/ai_live/stop':
+            self._handle_ai_live_stop()
+        elif self.path == '/api/ai_live/generate':
+            self._handle_ai_live_generate()
             
         else:
             # ��̬�ļ�����
@@ -2212,7 +2222,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             ai_live_commentary.start()
             self.send_json_response({
                 "success": True,
-                "message": "AI live room started"
+                "message": "AI直播间已启动"
             })
         except Exception as e:
             self.send_json_response({
@@ -2227,7 +2237,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if ai_live_commentary is None:
             self.send_json_response({
                 "success": True,
-                "message": "AI live room not running"
+                "message": "AI直播间未运行"
             })
             return
         
@@ -2235,7 +2245,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             ai_live_commentary.stop()
             self.send_json_response({
                 "success": True,
-                "message": "AI live room stopped"
+                "message": "AI直播间已停止"
             })
         except Exception as e:
             self.send_json_response({
@@ -3556,7 +3566,6 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
         
         # ��ʾ���ش��� (�������)
         if show_window:
-           :
             should_display = True
             if is_video_file:
                 should_display = (frame_count % DISPLAY_FRAME_SKIP == 0)
@@ -3572,8 +3581,9 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                     if frame_count == 1:
                         print(f"�7�2�1�5  �޷���ʾ����: {e}")
         else:
-            # ��ʹ����ʾ����,Ҳ��Ҫ�����¼����⿨��
-            cv2.waitKey(1)
+            # no-window / headless 模式下不要触发 HighGUI（waitKey/窗口）
+            # 否则在未编译 GTK/Cocoa 的 OpenCV 环境会直接抛异常并退出
+            pass
         
         # ÿ100֡��ӡ
         # if frame_count % 100 == 0:
@@ -3582,7 +3592,11 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
     # ����
     current_stats["status"] = "stopped"
     cap.release()
-    cv2.destroyAllWindows()
+    if show_window:
+        try:
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
 
     # ֹͣ��̨���񣬱��� Ctrl+C �˳�ʱ���� native ����/����
     try:

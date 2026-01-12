@@ -291,10 +291,32 @@ class AILiveCommentary:
         self.api_key = api_key or os.environ.get("DASHSCOPE_API_KEY", "")
         self.running = False
         
-        # 只保留解说员（去掉虚拟观众）
+        # 初始化解说员
         self.commentator = CommentatorAgent("解说员", self.api_key)
         
-        print("🎬 AI解说员已初始化")
+        # 恢复虚拟观众
+        self.audience = []
+        try:
+            all_personas = list(AudienceAgent.PERSONAS.keys())
+            # 随机选择 5-8 个观众
+            num_audience = min(len(all_personas), random.randint(5, 8))
+            selected_personas = random.sample(all_personas, num_audience)
+            for name in selected_personas:
+                self.audience.append(AudienceAgent(name, self.api_key))
+        except Exception as e:
+            print(f"⚠️ 初始化观众失败: {e}")
+            self.audience = []
+            
+        print(f"🎬 AI解说员已初始化，观众人数: {len(self.audience)}")
+
+        # 调试/观测：记录最近一次生成的上下文摘要，便于排查“没有输出/没拿到转写”
+        self.last_context = {
+            "ts": 0.0,
+            "recent_transcript_len": 0,
+            "recent_transcript_preview": "",
+            "key_moment_detected": False,
+            "key_moment_desc": "",
+        }
     
     def start(self):
         """启动解说"""
@@ -327,6 +349,20 @@ class AILiveCommentary:
             return {'commentator': None, 'audience': []}
         
         try:
+            # 记录上下文摘要，方便 status / 日志排查
+            try:
+                rt = (context.get('recent_transcript') or '')
+                rt_preview = rt.strip().replace("\n", " ")[:160]
+                self.last_context = {
+                    "ts": time.time(),
+                    "recent_transcript_len": len(rt.strip()),
+                    "recent_transcript_preview": rt_preview,
+                    "key_moment_detected": bool(context.get('key_moment_detected', False)),
+                    "key_moment_desc": (context.get('key_moment_desc') or '')[:120],
+                }
+            except Exception:
+                pass
+
             # 只保留解说员发言
             commentator_text = self.commentator.react(context)
             commentator_msg = None
@@ -338,9 +374,25 @@ class AILiveCommentary:
                     emoji=self.commentator.emoji
                 )
             
+            # 观众发言
+            audience_msgs = []
+            # 随机选取部分观众发言（避免刷屏）
+            # 降低到20%活跃度以免API请求过多
+            active_audience = [p for p in self.audience if random.random() < 0.2]
+            
+            for p in active_audience:
+                text = p.react(context)
+                if text:
+                    audience_msgs.append(CommentaryMessage(
+                        content=text,
+                        author=p.name,
+                        role='audience',
+                        emoji=p.emoji
+                    ))
+
             return {
                 'commentator': commentator_msg,
-                'audience': []  # 不再生成虚拟观众评论
+                'audience': audience_msgs
             }
             
         except Exception as e:
@@ -352,7 +404,8 @@ class AILiveCommentary:
         return {
             'running': self.running,
             'commentator': self.commentator.name,
-            'audience_count': len(self.audience)
+            'audience_count': len(self.audience),
+            'last_context': self.last_context
         }
 
 

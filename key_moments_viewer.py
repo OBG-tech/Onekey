@@ -504,6 +504,73 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         function fmtDate(ts) {
             return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         }
+
+        function pickSummaryEmoji(text) {
+            const safe = text || '';
+            try {
+                const match = safe.match(/\p{Extended_Pictographic}/u);
+                if (match && match[0]) return match[0];
+            } catch (e) {
+                /* ignore unsupported regex on older engines */
+            }
+
+            const buckets = [
+                { keys: ['笑', '开心', '愉快', '轻松', '趣'], icon: '😄' },
+                { keys: ['讨论', '会议', '沟通', '分享', '问答', '对话'], icon: '🗣️' },
+                { keys: ['发现', '灵感', 'idea', '启发', '亮点'], icon: '💡' },
+                { keys: ['紧张', '争论', '问题', '风险', '错误', 'bug'], icon: '⚠️' },
+                { keys: ['演示', '展示', '汇报', '讲解', '屏幕', 'demo'], icon: '🎬' },
+                { keys: ['合作', '协作', '团队', '一起', '配合'], icon: '🤝' },
+                { keys: ['思考', '计划', '方案', '设计', '沉思'], icon: '🤔' }
+            ];
+
+            for (const b of buckets) {
+                if (b.keys.some(k => safe.includes(k))) return b.icon;
+            }
+            return '✨';
+        }
+
+        function buildDisplaySummary(m) {
+            const pieces = [
+                m.ai_description,
+                m.analysis,
+                m.description,
+                m.user_note,
+                (m.ai_tags || []).join(''),
+                m.narrative_text,
+                m.ai_tagline,
+                m.tagline
+            ].filter(Boolean);
+
+            let text = pieces.join(' ').replace(/\s+/g, '');
+            if (!text) text = '这段时刻值得回看，包含重要细节';
+
+            if (text.length > 30) {
+                text = text.slice(0, 30);
+            } else if (text.length < 25) {
+                const extras = [
+                    m.ai_tagline || m.tagline || '',
+                    (m.ai_tags || []).join(''),
+                    '更多细节待回看',
+                    '抓住这个瞬间'
+                ];
+                for (const e of extras) {
+                    if (text.length >= 25) break;
+                    text = (text + e.replace(/\s+/g, '')).slice(0, 30);
+                }
+
+                if (text.length < 25) {
+                    text = (text + '需要重点关注这段现场').slice(0, 30);
+                }
+
+                if (text.length < 25) {
+                    text = text.padEnd(25, '.');
+                }
+            }
+
+            const emoji = pickSummaryEmoji(pieces.join(' '));
+            return `${emoji} ${text}`;
+        }
         
         function renderTimeline() {
             const list = document.getElementById('timelineList');
@@ -558,7 +625,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 const vUrl = hasV ? `/media/${vp.split('/').pop()}` : '';
                 const type = getType(m.source);
                 const tag = m.ai_tagline || m.tagline || 'Untitled';
-                const sum = m.ai_description || m.description || 'No summary';
+                const sum = buildDisplaySummary(m);
                 
                 return `
                     <div class="moment-card ${selectedId === m.id ? 'active' : ''}" id="card-${m.id}" data-id="${m.id}">
@@ -608,7 +675,8 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             const m = moments.find(x => x.id === id);
             if (!m) return;
             const type = getType(m.source);
-            const txt = `${type === 'user' ? '🔴 USER' : '🤖 AI'}: ${m.ai_tagline || m.tagline || 'Moment'}\n\n${m.ai_description || m.description || ''}\n\n---\nID: ${m.id}\nTime: ${new Date(m.timestamp * 1000).toLocaleString()}`;
+            const displaySummary = buildDisplaySummary(m);
+            const txt = `${type === 'user' ? '🔴 USER' : '🤖 AI'}: ${m.ai_tagline || m.tagline || 'Moment'}\n\n${displaySummary}\n\n---\nID: ${m.id}\nTime: ${new Date(m.timestamp * 1000).toLocaleString()}`;
             navigator.clipboard.writeText(txt).then(showFeedback).catch(() => {
                 const ta = document.createElement('textarea');
                 ta.value = txt;
