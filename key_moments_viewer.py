@@ -664,11 +664,80 @@ class MomentsHandler(SimpleHTTPRequestHandler):
                 if mime_type is None:
                     mime_type = 'application/octet-stream'
                 
+                file_size = filepath.stat().st_size
+                
+                # Handle range requests (needed for video seeking)
+                range_header = self.headers.get('Range')
+                if range_header:
+                    # Parse range header (e.g., "bytes=0-1023")
+                    try:
+                        byte_range = range_header.replace('bytes=', '').split('-')
+                        start = int(byte_range[0]) if byte_range[0] else 0
+                        end = int(byte_range[1]) if len(byte_range) > 1 and byte_range[1] else file_size - 1
+                        
+                        if start >= file_size:
+                            self.send_error(416, "Requested Range Not Satisfiable")
+                            return
+                        
+                        # Send partial content response
+                        self.send_response(206)  # Partial Content
+                        self.send_header('Content-Type', mime_type)
+                        self.send_header('Content-Range', f'bytes {start}-{end}/{file_size}')
+                        self.send_header('Content-Length', str(end - start + 1))
+                        self.send_header('Accept-Ranges', 'bytes')
+                        self.end_headers()
+                        
+                        # Send the requested byte range
+                        try:
+                            with open(filepath, 'rb') as f:
+                                f.seek(start)
+                                remaining = end - start + 1
+                                chunk_size = min(8192, remaining)
+                                while remaining > 0:
+                                    chunk = f.read(min(chunk_size, remaining))
+                                    if not chunk:
+                                        break
+                                    try:
+                                        self.wfile.write(chunk)
+                                        remaining -= len(chunk)
+                                    except (ConnectionResetError, BrokenPipeError):
+                                        break
+                        except Exception as e:
+                            print(f"Error streaming range {start}-{end} of {filename}: {e}")
+                        return
+                    except (ValueError, IndexError) as e:
+                        print(f"Invalid range header: {range_header}")
+                        # Fall through to send full file
+                
+                # Send full file (no range request)
                 self.send_response(200)
-            self.end_headers()
-            self.wfile.write(json.dumps({'moments': load_moments()}).encode('utf-8'))
-        else:
-            self.send_error(404)
+                self.send_header('Content-Type', mime_type)
+                self.send_header('Accept-Ranges', 'bytes')
+                self.send_header('Content-Length', str(file_size))
+                self.end_headers()
+                
+                # Stream the file content in chunks
+                try:
+                    with open(filepath, 'rb') as f:
+                        chunk_size = 8192  # 8KB chunks
+                        while True:
+                            chunk = f.read(chunk_size)
+                            if not chunk:
+                                break
+                            try:
+                                self.wfile.write(chunk)
+                            except (ConnectionResetError, BrokenPipeError):
+                                # Client closed connection (normal for video streaming)
+                                break
+                except Exception as e:
+                    print(f"Error streaming file {filename}: {e}")
+                return
+            else:
+                self.send_error(404, f"File not found: {filename}")
+                return
+        
+        # If no route matched, send 404
+        self.send_error(404)
 
     def do_POST(self):
         # Proxy API requests to main system
