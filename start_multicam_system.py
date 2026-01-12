@@ -98,9 +98,16 @@ if args.test:
     
     import cv2
     import time
+    import os
     
     frame_count = 0
     start_time = time.time()
+    
+    # 检测是否有显示环境
+    has_display = os.environ.get('DISPLAY') is not None
+    if not has_display:
+        print("⚠️  未检测到显示环境，将跳过GUI显示")
+        print("   提示：在SSH或无桌面环境下运行时，建议使用 --record 参数保存视频")
     
     try:
         while True:
@@ -118,19 +125,37 @@ if args.test:
                 cv2.putText(frame, f"FPS: {fps:.1f}", (30, 60), 
                            cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 3)
             
-            # 缩小显示
-            display_frame = cv2.resize(frame, (1920, 1080))
-            cv2.imshow('Multi-Camera Test', display_frame)
-            
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            # 只在有显示环境时尝试显示窗口
+            if has_display:
+                try:
+                    # 缩小显示
+                    display_frame = cv2.resize(frame, (1920, 1080))
+                    cv2.imshow('Multi-Camera Test', display_frame)
+                    
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        break
+                except Exception as e:
+                    if frame_count == 1:
+                        print(f"⚠️  无法显示窗口: {e}")
+                        print(f"   继续运行但不显示GUI，按 Ctrl+C 停止")
+                        has_display = False
+            else:
+                # 无显示环境，每秒打印一次状态
+                if frame_count % int(fps) == 0:
+                    print(f"📊 FPS: {fps:.1f} | 帧数: {frame_count}")
+                
+                # 模拟waitKey以避免CPU占用过高
+                time.sleep(0.001)
     
     except KeyboardInterrupt:
         print("\n⚠️  用户中断")
     
     finally:
         multicam.release()
-        cv2.destroyAllWindows()
+        try:
+            cv2.destroyAllWindows()
+        except:
+            pass
         
         avg_fps = frame_count / elapsed if elapsed > 0 else 0
         print(f"\n📊 平均 FPS: {avg_fps:.1f}")

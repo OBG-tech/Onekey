@@ -3532,18 +3532,35 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                 should_display = (frame_count % DISPLAY_FRAME_SKIP == 0)
             
             if should_display:
-                try:
-                    cv2.imshow("Integrated System (按q退出)", annotated_frame)
-                    key = cv2.waitKey(1) & 0xFF
-                    if key == ord('q'):
-                        is_running = False
-                        break
-                except Exception as e:
+                # 检测显示环境
+                import os
+                has_display = os.environ.get('DISPLAY') is not None
+                
+                if has_display:
+                    try:
+                        cv2.imshow("Integrated System (按q退出)", annotated_frame)
+                        key = cv2.waitKey(1) & 0xFF
+                        if key == ord('q'):
+                            is_running = False
+                            break
+                    except Exception as e:
+                        if frame_count == 1:
+                            print(f"⚠️  无法显示窗口: {e}")
+                            print(f"   系统将继续运行但不显示GUI窗口")
+                            print(f"   访问 Web 界面查看实时画面")
+                            show_window = False  # 禁用后续显示尝试
+                else:
                     if frame_count == 1:
-                        print(f"⚠️  无法显示窗口: {e}")
+                        print(f"⚠️  未检测到显示环境 (DISPLAY未设置)")
+                        print(f"   系统将继续运行但不显示GUI窗口")
+                        print(f"   访问 Web 界面查看实时画面")
+                        show_window = False  # 禁用后续显示尝试
         else:
-            # 即使不显示窗口,也需要处理事件避免卡死
-            cv2.waitKey(1)
+            # 即使不显示窗口,也需要处理事件避免卡死（仅在有显示环境时）
+            try:
+                cv2.waitKey(1)
+            except:
+                pass
         
         # 每100帧打印
         # if frame_count % 100 == 0:
