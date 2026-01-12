@@ -91,7 +91,7 @@ def _get_fireredasr_model():
         except Exception as e:
             raise ImportError(
                 "δ��װ fireredasr��FireRedASR����\n"
-                "�1�7�τ1�7: https://github.com/FireRedTeam/FireRedASR\n"
+                "�ο�: https://github.com/FireRedTeam/FireRedASR\n"
                 "���ٽ��뷽ʽ����ѡһ����\n"
                 "1) ֱ���ڱ���ĿĿ¼��ִ��: git clone https://github.com/FireRedTeam/FireRedASR.git\n"
                 "   Ȼ������ FIREREDASR_MODEL_DIR ָ��Ȩ��Ŀ¼��\n"
@@ -107,7 +107,7 @@ def _get_fireredasr_model():
         )
 
     _fireredasr_model_cache = FireRedAsr.from_pretrained(FIREREDASR_ASR_TYPE, model_dir)
-    print(f"�7�3 FireRedASR �Ѽ���: type={FIREREDASR_ASR_TYPE}, dir={model_dir}, gpu={FIREREDASR_USE_GPU}")
+    print(f"✅ FireRedASR 已加载: type={FIREREDASR_ASR_TYPE}, dir={model_dir}, gpu={FIREREDASR_USE_GPU}")
     return _fireredasr_model_cache
 
 def transcribe_audio_with_fireredasr(wav_path: str) -> str:
@@ -347,7 +347,7 @@ current_frame_raw = None   # �洢ԭʼ֡���ڹؼ�ʱ�̱��
 frame_lock = threading.Lock()  # �߳���
 
 # �9�0 ��Ƶ��Ƭ������ (���ڶ�ģ̬ AI ����)
-# �1�71�1�77�1�75�1�75: [{"ts": epoch_seconds, "frame_number": int, "frame": np.ndarray}, ...]
+# �ṹ: [{"ts": epoch_seconds, "frame_number": int, "frame": np.ndarray}, ...]
 # ��Ҫ������ֻ�� 30 ֡�������� 30fps/ÿ10֡����=3fps �������ֻ���ǡ�10�룬
 video_slice_buffer = []
 
@@ -399,7 +399,7 @@ class FaceDatabase:
         
         # �9�3 ������ʶ��ϵͳ (Re-ID)
         self.person_features = {}  # person_id -> ���������б�
-        self.track_to_person_map = {}  # track_id -> person_id �0�1�1�7�1�7
+        self.track_to_person_map = {}  # track_id -> person_id ӳ��
         self.person_appearance_history = defaultdict(list)  # person_id -> [track_ids]
     
     def extract_simple_features(self, image):
@@ -859,7 +859,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
                     "status": "error",
                     "message": str(e)
                 })
-        # �0�1�1�7�1�7 timeline �0�5: /api/timeline/{person_id}/frame/{frame_num}
+        # ɾ�� timeline ֡: /api/timeline/{person_id}/frame/{frame_num}
         elif '/api/timeline/' in self.path and '/frame/' in self.path:
             try:
                 parts = self.path.split('/')
@@ -1194,14 +1194,14 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         # Safety: 如果 moments 为空，则尝试从磁盘重新加载
         if not key_moments_manager.moments:
             try:
-                print("�1�77�1�72�1�71�1�75 Key moments list empty, attempting reload from disk...")
+                print("⚠️ Key moments list empty, attempting reload from disk...")
                 key_moments_manager._load_moments()
             except Exception as e:
-                print(f"�1�77�1�74 Failed to reload moments: {e}")
+                print(f"❌ Failed to reload moments: {e}")
 
         moments = key_moments_manager.get_moments()
         
-        # �1�71�1�770�1�71�1�778 Force Show ALL moments (Disable filtering to match 8084 viewer)
+        # �0�8 Force Show ALL moments (Disable filtering to match 8084 viewer)
         filtered_moments = moments
         skipped_count = 0
 
@@ -1539,7 +1539,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             )
             
             if not moment:
-                print("�1�77�1�74 Failed to create KeyMoment")
+                print("�7�4 Failed to create KeyMoment")
                 self.send_json_response({
                     "success": False,
                     "error": "Failed to create moment object"
@@ -1654,13 +1654,13 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             content_type = self.headers.get('Content-Type', '')
             
             if 'multipart/form-data' not in content_type:
-                self.send_json_response({"success": False, "error": "�1�71�1�77�1�71�1�77�1�70�1�78 multipart/form-data"})
+                self.send_json_response({"success": False, "error": "��Ҫ multipart/form-data"})
                 return
             
             # ��ȡ boundary
             boundary = content_type.split('boundary=')[1] if 'boundary=' in content_type else None
             if not boundary:
-                self.send_json_response({"success": False, "error": "�0�6�1�7�1�7 boundary"})
+                self.send_json_response({"success": False, "error": "ȱ�� boundary"})
                 return
             
             # ��ȡ����
@@ -2482,7 +2482,7 @@ def transcribe_audio_with_qwen(audio_path: str) -> str:
                     return text.strip()
                 return ""
             else:
-                print(f"ASR �0�2�1�7�1�7: {result.message}")
+                print(f"ASR ʧ��: {result.message}")
         except ImportError:
             print("dashscope δ��װ��ʹ�ñ��÷���")
         except Exception as e:
@@ -2850,7 +2850,7 @@ def process_face_recognition(frame, boxes, frame_count, face_app):
             
             if face_crop.size > 0:
                 person_id = face_db.add_face(embedding, frame_image=face_crop)
-                print(f"�1�71�1�779�1�71�1�775 New person found: Person_{person_id}")
+                print(f"�9�5 New person found: Person_{person_id}")
         
         # ��¼���
         snapshot = frame.copy() if frame_count % 30 == 0 else None
@@ -3069,7 +3069,7 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                                 person_id = matched_person_id
                                 face_db.map_track_to_person(track_id, person_id)
                                 face_db.add_person_feature(person_id, person_crop)
-                                print(f"�1�79�1�73 Re-ID�0�5�1�7�1�7: Track#{track_id} -> Person_{person_id}")
+                                print(f"�9�3 Re-IDƥ��: Track#{track_id} -> Person_{person_id}")
                             else:
                                 # ȫ�µ�����,������ID
                                 person_id = track_id  # ʹ��track_id��Ϊperson_id
@@ -3086,7 +3086,7 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                                 face_db.person_images[person_id] = str(img_path)
                                 face_db.person_names[person_id] = f"Person_{person_id}"
                                 face_db.active_people_this_session.add(person_id)
-                                print(f"�1�71�1�779�1�71�1�774 New person: Person_{person_id} (Track#{track_id})")
+                                print(f"�9�4 New person: Person_{person_id} (Track#{track_id})")
                             
                             # ����person_face_map���ں�������
                             person_face_map[track_id] = person_id
@@ -3317,7 +3317,7 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                                     continue # ��������LLM��������Ϊ�Ѿ�������
 
                                 if os.environ.get('MULTIMODAL_DEBUG', '0') == '1':
-                                    print(f"�1�71�1�770�1�71�1�771 Locator pick [{cand.get('time_str','--')}] �1�71�1�77�1�71�1�77t={delta:.1f}s reason={cand.get('reason','')[:60]}")
+                                    print(f"�0�1 Locator pick [{cand.get('time_str','--')}] ��t={delta:.1f}s reason={cand.get('reason','')[:60]}")
 
                                 result = key_moments_manager.analyze_with_multimodal(
                                     frame=frame_sample,
@@ -3332,7 +3332,7 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                                 # �����⵽�ؼ�ʱ��(��Ҫ�� > 0.2)
                                 if result:
                                     print(f"�7�8 ���ֹؼ�ʱ��! ��Ҫ��: {result.get('importance', 0):.2f}")
-                                    print(f"   �1�7�1�7�1�7�1�7: {result.get('description', 'N/A')[:100]}")
+                                    print(f"   ����: {result.get('description', 'N/A')[:100]}")
                                     found_count += 1
                                     
                                     # �9�9 ���봰��תд��ֻ��ʾǰ��15���תд������������Ƭ��
@@ -3422,7 +3422,7 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
 
                                 if result:
                                     print(f"�7�8 ���ֹؼ�ʱ��! ��Ҫ��: {result.get('importance', 0):.2f}")
-                                    print(f"   �1�7�1�7�1�7�1�7: {result.get('description', 'N/A')[:100]}")
+                                    print(f"   ����: {result.get('description', 'N/A')[:100]}")
                                     found_count += 1
                                     if found_count >= max_hits:
                                         break
@@ -3634,7 +3634,7 @@ def shutdown_background_services():
     """优雅地停止后台线程/音频资源，并打印退出快照（防止 BPT trap）"""
     global realtime_asr_engine, meeting_notes_generator, key_moments_manager, microphone_recorder
 
-    print("�1�70�1�75 Stopping services...", end="\r")
+    print("🛑 Stopping services...", end="\r")
 
     # 并行停止（因为IO密集；但停止摄像头/麦克风可能阻塞，文件保存）
     import concurrent.futures
@@ -3718,7 +3718,7 @@ def _print_exit_process_snapshot(web_port: int | None = None):
                 for ln in matches[:200]:
                     print(ln)
                 if len(matches) > 200:
-                    print(f"... (��ʡ�� {len(matches) - 200} ��)")
+                    print(f"... (已省略 {len(matches) - 200} 行)")
             else:
                 print("(未发现匹配进程)")
         except Exception as e:
@@ -3740,12 +3740,12 @@ def _print_exit_process_snapshot(web_port: int | None = None):
         if lsof:
             try:
                 out = subprocess.check_output([lsof, "-nP", f"-iTCP:{web_port}", "-sTCP:LISTEN"], text=True, errors="replace")
-                print(f"\n[lsof] �1�7�0�5�1�7 {web_port} LISTEN")
+                print(f"\n[lsof] 端口 {web_port} LISTEN")
                 print(out.strip() or "(无输出)")
             except subprocess.CalledProcessError:
                 print(f"\n[lsof] 端口 {web_port} 未被占用 (或无权限查看)")
             except Exception as e:
-                print(f"\n[lsof] ��ѯ�˿� {web_port} ʧ��: {e}")
+                print(f"\n[lsof] 查询端口 {web_port} 失败: {e}")
         else:
             print(f"\n[lsof] 未找到 lsof，无法查询端口 {web_port} 占用情况")
 
@@ -3772,7 +3772,7 @@ def main():
     
     print("╔════════════════════════════════════════════════════════╗")
     print("║   🎬 智能视频分析与人脸追踪整合系统                   ║")
-    print("�1�7U   ONE_KEY + multi_person_tracker                      �1�7U")
+    print("║   ONE_KEY + multi_person_tracker                      ║")
     print("╚════════════════════════════════════════════════════════╝\n")
     
     # 🚀 优先启动Web服务器（立即可访问界面）
@@ -3865,7 +3865,7 @@ def main():
                     keywords = ["Stop", "stop", "Shut", "shut", "Clos", "clos", 
                                 "��", "ͣ", "��", "Exit", "exit", "End", "end", 
                                 "Saved", "saved", "��", "¼", # ����¼��/���������ʾ
-                                "Server", "server", "�1�7�1�7�1�7�1�7", "Cleaning", "clean",
+                                "Server", "server", "����", "Cleaning", "clean",
                                 # 退出提示（中文）
                                 "用户", "中断", "退出", "停止", "Ctrl+C", "后台"]
                     # �޸������ٷ��д��հ׷���text.strip() == ""������ֹCtrl+C�����޻س�ˢ��

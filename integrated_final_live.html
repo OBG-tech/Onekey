@@ -2343,7 +2343,7 @@
                                                 background: #f5f5f5; border: 2px solid #333;">
                                     <div style="font-size: 10px; color: #666; font-weight: bold; margin-bottom: 2px;">
                                         AI Detected</div>
-                                    <div style="font-size: 22px; font-weight: bold; color: #3498db;"
+                                    <div style="font-size: 22px, font-weight: bold; color: #3498db;"
                                         id="ai-detected-count">0
                                     </div>
                                 </div>
@@ -2392,7 +2392,7 @@
                             <div id="video-audio-hint" style="display: none; position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
                                        background: rgba(0, 0, 0, 0.85); color: #fff; padding: 8px 16px;
                                        border-radius: 6px; font-size: 13px; z-index: 50; white-space: nowrap;
-                                       box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: none;">
+                                       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); pointer-events: none;">
                                 💡 点击播放器底部的 🔊 按钮开启音频
                             </div>
                             <div id="video-error-right"
@@ -3021,6 +3021,17 @@
         };
 
         const _buildCardSummary = (m, isUserAnchor) => {
+            // 0) 尝试提取"Card Summary/卡片摘要"
+            const analysis = (m?.analysis || '');
+            let cardSummary = '';
+            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+            if (sumMatch) cardSummary = sumMatch[1].trim();
+            
+            // If no explicit summary in text, check if ai_description is a short summary
+            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                cardSummary = m.ai_description.trim();
+            }
+
             // 1) 优先使用后端 ai_tagline
             const tagline = (m?.ai_tagline || '').trim();
             // 2) 从 analysis/ai_description 抽取“详细描述”
@@ -3029,24 +3040,79 @@
             // 3) AI 总结（一句话）
             const summaryRaw = (m?.ai_summary || '').trim();
             const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
-            
+
             const userNote = (m?.user_note || '').trim();
             let core = '';
 
             if (isUserAnchor) {
-                // 手动高光：备注优先
                 const note = userNote;
                 const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
                 core = noteLooksLikeTranscript ? '' : note;
-                
-                // 补充信息：Summary > Tagline > Detail
-                const extra = summary || tagline || detail;
+
+                // 补充信息：CardSummary > Summary > Tagline > Detail
+                const extra = cardSummary || summary || tagline || detail;
                 if (extra && extra !== core) {
                     core = core ? `${core} · ${extra}` : extra;
                 }
             } else {
-                // 非手动高光：Summary > Tagline > Detail
-                core = summary || tagline || detail || '';
+                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                core = cardSummary || summary || detail || tagline || '';
+            }
+            
+            if (!core) return '';
+
+            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+            return _shorten(core, 30);
+        };
+
+        const oldFingerprint = window._lastRenderedMomentIds || '';
+        // 保存所有时刻列表供翻页使用
+        const sorted = [...data.moments].sort((a, b) => {
+            const ta = Number(a?.timestamp);
+            const tb = Number(b?.timestamp);
+            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+            if (!Number.isFinite(ta)) return 1;
+            if (!Number.isFinite(tb)) return -1;
+            return ta - tb;
+        });
+
+        const _buildCardSummary = (m, isUserAnchor) => {
+            // 0) 尝试提取"Card Summary/卡片摘要"
+            const analysis = (m?.analysis || '');
+            let cardSummary = '';
+            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+            if (sumMatch) cardSummary = sumMatch[1].trim();
+            
+            // If no explicit summary in text, check if ai_description is a short summary
+            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                cardSummary = m.ai_description.trim();
+            }
+
+            // 1) 优先使用后端 ai_tagline
+            const tagline = (m?.ai_tagline || '').trim();
+            // 2) 从 analysis/ai_description 抽取“详细描述”
+            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+            const detail = _extractDetailFromText(sourceText);
+            // 3) AI 总结（一句话）
+            const summaryRaw = (m?.ai_summary || '').trim();
+            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+            const userNote = (m?.user_note || '').trim();
+            let core = '';
+
+            if (isUserAnchor) {
+                const note = userNote;
+                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                core = noteLooksLikeTranscript ? '' : note;
+
+                // 补充信息：CardSummary > Summary > Tagline > Detail
+                const extra = cardSummary || summary || tagline || detail;
+                if (extra && extra !== core) {
+                    core = core ? `${core} · ${extra}` : extra;
+                }
+            } else {
+                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                core = cardSummary || summary || detail || tagline || '';
             }
             
             if (!core) return '';
@@ -3647,10 +3713,23 @@
                         });
 
                         const _buildCardSummary = (m, isUserAnchor) => {
-                            // 保持与全局 _buildCardSummary 一致的逻辑
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
                             const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
                             const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
                             const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
                             const summaryRaw = (m?.ai_summary || '').trim();
                             const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
 
@@ -3662,1480 +3741,1412 @@
                                 const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
                                 core = noteLooksLikeTranscript ? '' : note;
 
-                                const extra = summary || tagline || detail;
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
                                 if (extra && extra !== core) {
                                     core = core ? `${core} · ${extra}` : extra;
                                 }
                             } else {
-                                core = summary || tagline || detail || '';
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
                             }
-
+                            
                             if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
                             return _shorten(core, 30);
                         };
-                        allMomentsList = sorted;
-                        window.allMoments = sorted;
 
-                        const groups = new Map();
-                        for (let i = 0; i < sorted.length; i++) {
-                            const m = sorted[i];
-                            const bucketKey = _kmBucketKeyFromMoment(m, 20);
-                            if (!groups.has(bucketKey)) groups.set(bucketKey, []);
-                            groups.get(bucketKey).push({ m, index: i });
-                        }
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
 
-                        const parts = [];
-                        for (const [bucketKey, items] of groups.entries()) {
-                            const bucketLabel = String(bucketKey || '').replace(/^\d{4}-/, '') || String(bucketKey || '');
-                            parts.push(`<div class="km-minute-group">`);
-                            parts.push(`<div class="km-minute-header">🕒 ${_escapeHtml(bucketLabel)}<div class="km-minute-line"></div></div>`);
-                            parts.push(`<div class="km-bucket-row">`);
-                            for (const it of items) {
-                                const m = it.m;
-                                const index = it.index;
-                                const isUserAnchor = m.source === 'user_anchor';
-                                const typeClass = isUserAnchor ? 'user-moment' : 'ai-moment';
-                                const icon = isUserAnchor ? '🔴' : '🤖';
-
-                                // 🔍 查找匹配的按钮编号
-                                const ts = Number(m?.timestamp);
-                                const matchedButton = Number.isFinite(ts) ? findMatchingButton(ts) : null;
-                                const buttonAttr = matchedButton ? `data-button="${matchedButton}"` : '';
-
-                                let description = _buildCardSummary(m, isUserAnchor);
-                                if (!description) {
-                                    const raw = (m.user_note || m.transcript || 'No description');
-                                    const prefix = isUserAnchor ? '📝 ' : '🗣️ ';
-                                    description = prefix + _shorten(raw, 300);  // 增加到300字符显示更多细节
-                                }
-                                const tags = (m.ai_framework_tags || "").trim();  // 使用框架标签，如[R2]论证、Eng-Flow
-                                const hasVideo = m.video_url && m.video_duration > 0;
-                                const dtShort = Number.isFinite(ts) && ts > 0 ? _kmFormatLocalTime(ts, false) : _kmMinuteKey(m?.time_str);
-                                const under = '';
-
-                                parts.push(`
-                                    <div class="keymoment-card ${typeClass}" data-moment-id="${_escapeHtml(String(m.id || ''))}" data-moment-index="${index}" ${buttonAttr} onclick="onKeyMomentCardClick(${index}, event)" style="cursor: pointer;">
-                                        <button class="keymoment-delete-btn" onpointerdown="event.stopPropagation();" onmousedown="event.stopPropagation();" onclick="deleteKeyMoment(${index}, event); return false;" title="删除">🗑️</button>
-                                        <img src="${m.image_url}" alt="Moment ${index + 1}"
-                                             onerror="this.style.display='none'">
-                                        ${hasVideo ? `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-                                            font-size:30px; color:rgba(255,255,255,0.85);
-                                            background:rgba(0,0,0,0.3);
-                                            border-radius:50%;
-                                            width:45px; height:45px;
-                                            display:flex; align-items:center; justify-content:center;
-                                            backdrop-filter:blur(4px);
-                                            box-shadow:0 4px 12px rgba(0,0,0,0.3);
-                                            pointer-events:none;">▶</div>
-                                            <div style="position:absolute; top:4px; right:4px;
-                                            background:rgba(0,0,0,0.5); color:#fff;
-                                            padding:3px 8px; border-radius:12px; font-size:10px;
-                                            backdrop-filter:blur(4px);
-                                            border:1px solid rgba(255,255,255,0.2);">${m.video_duration.toFixed(1)}s</div>` : ''}
-                                        <div class="moment-time">
-                                            <span>${_escapeHtml(dtShort || '--:--')}</span>
-                                            <span>${icon}</span>
-                                        </div>
-                                        <div class="moment-desc" style="font-size:11px;">${_escapeHtml(description)}</div>
-                                        ${under ? `<div class="moment-time-under">🕐 ${_escapeHtml(under)}</div>` : ''}
-                                        ${tags ? `<div style="font-size:9px; color:#666; margin-top:2px; font-style:italic;">#${tags}</div>` : ''}
-                                        ${matchedButton ? `<div style="position:absolute; top:4px; left:4px; background:rgba(220,20,60,0.9); color:#fff; padding:1px 4px; border-radius:4px; font-size:8px; font-weight:bold; backdrop-filter:blur(4px);">🎮${matchedButton}</div>` : ''}
-                                        ${m.ai_importance ? `<div style="position:absolute; bottom:4px; right:4px; font-size:10px; font-weight:bold; color:#d35400;">${(m.ai_importance * 100).toFixed(0)}%</div>` : ''}
-                                    </div>
-                                `);
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
                             }
-                            parts.push(`</div>`);
-                            parts.push(`</div>`);
-                        }
-                        grid.innerHTML = parts.join('');
-
-                        // 更新左侧竖向时间轴 + 右下 Linkography（不影响主渲染）
-                        try { updateKeyMomentsTimeAxis(sorted); } catch (e) { }
-                        try { scheduleLinkographyUpdate(sorted); } catch (e) { }
-                    } else {
-                        allMomentsList = [];
-                        grid.innerHTML = `
-                            <div class="empty-state" style="width:100%; text-align:center; padding: 20px;">
-                                <div style="font-size: 48px; margin-bottom: 8px;">🎯</div>
-                                <div style="color:#666;">No Key Moments Yet</div>
-                                <div style="font-size:11px; color:#999; margin-top: 4px;">
-                                    Press the red button to mark important moments, or wait for AI auto-detection (approx. every 3.5 mins)
-                                </div>
-                            </div>
-                        `;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching key moments:', error);
-                    // 回退到旧的 keyframes API
-                    updateKeyframesFallback();
-                });
-        }
-
-        function _kmMinuteKey(timeStr) {
-            const s = (timeStr || '').trim();
-            const m = s.match(/^(\d+):(\d+):(\d+)/);
-            if (!m) return s || '--:--';
-            const hh = String(m[1] || '0').padStart(2, '0');
-            const mm = String(m[2] || '0').padStart(2, '0');
-            return `${hh}:${mm}`;
-        }
-
-        function _kmFormatLocalDateTime(tsSeconds, withSeconds) {
-            try {
-                const d = new Date(Number(tsSeconds) * 1000);
-                if (Number.isNaN(d.getTime())) return '';
-                const yyyy = String(d.getFullYear());
-                const MM = String(d.getMonth() + 1).padStart(2, '0');
-                const dd = String(d.getDate()).padStart(2, '0');
-                const hh = String(d.getHours()).padStart(2, '0');
-                const mm = String(d.getMinutes()).padStart(2, '0');
-                const ss = String(d.getSeconds()).padStart(2, '0');
-                return withSeconds ? `${yyyy}-${MM}-${dd} ${hh}:${mm}:${ss}` : `${yyyy}-${MM}-${dd} ${hh}:${mm}`;
-            } catch (e) {
-                return '';
-            }
-        }
-
-        function _kmFormatLocalTime(tsSeconds, withSeconds) {
-            try {
-                const d = new Date(Number(tsSeconds) * 1000);
-                if (Number.isNaN(d.getTime())) return '';
-                const hh = String(d.getHours()).padStart(2, '0');
-                const mm = String(d.getMinutes()).padStart(2, '0');
-                const ss = String(d.getSeconds()).padStart(2, '0');
-                return withSeconds ? `${hh}:${mm}:${ss}` : `${hh}:${mm}`;
-            } catch (e) {
-                return '';
-            }
-        }
-
-        function _kmMinuteKeyFromMoment(m) {
-            const ts = Number(m?.timestamp);
-            if (Number.isFinite(ts) && ts > 0) {
-                const s = _kmFormatLocalDateTime(ts, false);
-                // 强制按分钟聚合
-                return s || _kmMinuteKey(m?.time_str);
-            }
-            return _kmMinuteKey(m?.time_str);
-        }
-
-        // 时间轴聚合：按本地时间 20 分钟一个桶（跨天不混）
-        function _kmBucketKeyFromMoment(m, bucketMinutes = 20) {
-            const ts = Number(m?.timestamp);
-            const bm = Math.max(1, Math.min(60, Number(bucketMinutes) || 20));
-            if (Number.isFinite(ts) && ts > 0) {
-                const d = new Date(ts * 1000);
-                if (!Number.isNaN(d.getTime())) {
-                    const yyyy = String(d.getFullYear());
-                    const MM = String(d.getMonth() + 1).padStart(2, '0');
-                    const dd = String(d.getDate()).padStart(2, '0');
-                    const hh = String(d.getHours()).padStart(2, '0');
-                    const mm0 = Math.floor((d.getMinutes() || 0) / bm) * bm;
-                    const mm = String(mm0).padStart(2, '0');
-                    return `${yyyy}-${MM}-${dd} ${hh}:${mm}`;
-                }
-            }
-            // 兜底：退回分钟 key
-            return _kmMinuteKeyFromMoment(m);
-        }
-
-        // Ctrl + 滚轮 / 触控板捏合：切换 Key Moments 的“信息密度”
-        function initKeyMomentsZoom() {
-            const grid = document.getElementById('keymoments-grid');
-            if (!grid || grid._kmZoomBound) return;
-            grid._kmZoomBound = true;
-
-            let mode = 'normal'; // normal | out | in
-            function applyMode() {
-                grid.classList.remove('km-zoom-out', 'km-zoom-in');
-                if (mode === 'out') grid.classList.add('km-zoom-out');
-                if (mode === 'in') grid.classList.add('km-zoom-in');
-            }
-            applyMode();
-
-            grid.addEventListener('wheel', (e) => {
-                // 不劫持普通滚动；仅在 Ctrl/捏合缩放时触发
-                if (!e.ctrlKey) return;
-                e.preventDefault();
-                if (e.deltaY > 0) {
-                    mode = (mode === 'in') ? 'normal' : 'out';
-                } else {
-                    mode = (mode === 'out') ? 'normal' : 'in';
-                }
-                applyMode();
-            }, { passive: false });
-        }
-
-        // 左侧竖向时间轴：可拖动 thumb 以定位滚动位置，并显示当前视窗时间范围
-        function initKeyMomentsTimeAxis() {
-            const grid = document.getElementById('keymoments-grid');
-            const axis = document.getElementById('km-time-axis');
-            const thumb = document.getElementById('km-axis-thumb');
-            if (!grid || !axis || !thumb || axis._kmAxisBound) return;
-            axis._kmAxisBound = true;
-
-            const state = {
-                minTs: 0,
-                maxTs: 0,
-                dragging: false,
-                pointerId: null,
-                grabOffsetY: 0,
-            };
-            axis._kmAxisState = state;
-
-            function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-
-            function scrollMax() {
-                return Math.max(0, (grid.scrollHeight || 0) - (grid.clientHeight || 0));
-            }
-
-            function setScrollByFrac(frac) {
-                const max = scrollMax();
-                grid.scrollTop = max > 0 ? (frac * max) : 0;
-            }
-
-            function getFracByScroll() {
-                const max = scrollMax();
-                if (max <= 0) return 0;
-                return clamp((grid.scrollTop || 0) / max, 0, 1);
-            }
-
-            function updateThumbFromScroll() {
-                const frac = getFracByScroll();
-                const axisH = axis.clientHeight || 1;
-                const thumbH = thumb.offsetHeight || 1;
-                const pad = 10;
-                const usable = Math.max(0, axisH - thumbH - pad * 2);
-                const top = pad + usable * frac;
-                thumb.style.top = `${top}px`;
-                updateThumbLabel();
-            }
-
-            function updateThumbLabel() {
-                const label = document.getElementById('km-axis-thumb-label');
-                if (!label) return;
-                const minTs = Number(state.minTs);
-                const maxTs = Number(state.maxTs);
-                if (!(Number.isFinite(minTs) && Number.isFinite(maxTs) && maxTs > minTs)) {
-                    label.textContent = '--:--';
-                    return;
-                }
-                const max = scrollMax();
-                const a = max > 0 ? (grid.scrollTop / max) : 0;
-                const b = max > 0 ? ((grid.scrollTop + grid.clientHeight) / max) : 1;
-                const t1 = minTs + clamp(a, 0, 1) * (maxTs - minTs);
-                const t2 = minTs + clamp(b, 0, 1) * (maxTs - minTs);
-                const d1 = _kmFormatLocalDateTime(t1, false).replace(/^\d{4}-/, '');
-                const d2 = _kmFormatLocalDateTime(t2, false).replace(/^\d{4}-/, '');
-                const time1 = _kmFormatLocalTime(t1, false) || '--:--';
-                const time2 = _kmFormatLocalTime(t2, false) || '--:--';
-
-                // 视觉上保持紧凑：滑块里只放时间范围，日期放到 hover title
-                const date1 = d1.split(' ')[0] || '';
-                const date2 = d2.split(' ')[0] || '';
-                const crossDay = date1 && date2 && date1 !== date2;
-                label.textContent = crossDay ? `${time1}–${time2} 跨天` : `${time1}–${time2}`;
-                try {
-                    const thumb = document.getElementById('km-axis-thumb');
-                    if (thumb) thumb.title = `${d1} → ${d2}`;
-                } catch (e) { }
-            }
-
-            function renderTicks() {
-                const box = document.getElementById('km-axis-ticks');
-                if (!box) return;
-                box.innerHTML = '';
-                const minTs = Number(state.minTs);
-                const maxTs = Number(state.maxTs);
-                if (!(Number.isFinite(minTs) && Number.isFinite(maxTs) && maxTs > minTs)) return;
-
-                const axisH = axis.clientHeight || 1;
-                const pad = 10;
-                const usable = Math.max(1, axisH - pad * 2);
-                const tickCount = clamp(Math.round(usable / 90) + 1, 4, 7);
-                for (let i = 0; i < tickCount; i++) {
-                    const frac = tickCount <= 1 ? 0 : (i / (tickCount - 1));
-                    const y = pad + usable * frac;
-                    const ts = minTs + frac * (maxTs - minTs);
-                    const labelTxt = _kmFormatLocalDateTime(ts, false).replace(/^\d{4}-/, '').replace(' ', '\n');
-                    const tick = document.createElement('div');
-                    tick.className = 'km-axis-tick';
-                    tick.style.top = `${y}px`;
-                    const lab = document.createElement('div');
-                    lab.className = 'km-axis-label';
-                    lab.textContent = labelTxt;
-                    tick.appendChild(lab);
-                    box.appendChild(tick);
-                }
-            }
-
-            function renderDots(minuteGroups) {
-                const box = document.getElementById('km-axis-dots');
-                if (!box) return;
-                box.innerHTML = '';
-                const minTs = Number(state.minTs);
-                const maxTs = Number(state.maxTs);
-                if (!(Number.isFinite(minTs) && Number.isFinite(maxTs) && maxTs > minTs)) return;
-
-                let axisX = 58;
-                try {
-                    const v = getComputedStyle(axis).getPropertyValue('--km-axis-x');
-                    const n = parseFloat(String(v).trim());
-                    if (Number.isFinite(n)) axisX = n;
-                } catch (e) { }
-
-                const axisH = axis.clientHeight || 1;
-                const pad = 10;
-                const usable = Math.max(1, axisH - pad * 2);
-
-                const entries = Array.isArray(minuteGroups) ? minuteGroups : [];
-                for (const g of entries) {
-                    const ts = Number(g?.ts);
-                    if (!Number.isFinite(ts) || ts <= 0) continue;
-                    const frac = (ts - minTs) / (maxTs - minTs);
-                    const y = pad + usable * Math.max(0, Math.min(1, frac));
-
-                    const dot = document.createElement('div');
-                    dot.className = 'km-axis-dot' + (g?.hasUser ? '' : ' km-axis-dot-soft');
-                    const count = Number(g?.count) || 1;
-                    const size = Math.max(8, Math.min(14, 8 + Math.floor(Math.log2(count + 1) * 2)));
-                    dot.style.width = `${size}px`;
-                    dot.style.height = `${size}px`;
-                    dot.style.left = `${axisX - size / 2}px`;
-                    dot.style.top = `${y}px`;
-                    const key = String(g?.key || '').trim();
-                    const hint = g?.hasUser ? '含User标记' : '仅AI';
-                    dot.title = `20分钟聚合点：${key || '—'} | ${count}条 | ${hint}`;
-                    box.appendChild(dot);
-                }
-            }
-
-            // 点击轴跳转
-            axis.addEventListener('pointerdown', (e) => {
-                if (e.target === thumb || thumb.contains(e.target)) return;
-                const rect = axis.getBoundingClientRect();
-                const axisH = axis.clientHeight || 1;
-                const thumbH = thumb.offsetHeight || 1;
-                const pad = 10;
-                const usable = Math.max(0, axisH - thumbH - pad * 2);
-                const y = clamp(e.clientY - rect.top - thumbH / 2, pad, pad + usable);
-                const frac = usable > 0 ? (y - pad) / usable : 0;
-                setScrollByFrac(frac);
-                updateThumbFromScroll();
-            });
-
-            // 拖动 thumb
-            thumb.addEventListener('pointerdown', (e) => {
-                e.preventDefault();
-                state.dragging = true;
-                state.pointerId = e.pointerId;
-                const rect = thumb.getBoundingClientRect();
-                state.grabOffsetY = e.clientY - rect.top;
-                try { thumb.setPointerCapture(e.pointerId); } catch (_) { }
-            });
-
-            thumb.addEventListener('pointermove', (e) => {
-                if (!state.dragging || state.pointerId !== e.pointerId) return;
-                const rect = axis.getBoundingClientRect();
-                const axisH = axis.clientHeight || 1;
-                const thumbH = thumb.offsetHeight || 1;
-                const pad = 10;
-                const usable = Math.max(0, axisH - thumbH - pad * 2);
-                const y = clamp(e.clientY - rect.top - state.grabOffsetY, pad, pad + usable);
-                const frac = usable > 0 ? (y - pad) / usable : 0;
-                setScrollByFrac(frac);
-                updateThumbFromScroll();
-            });
-
-            function endDrag(e) {
-                if (state.pointerId !== null && e && e.pointerId !== state.pointerId) return;
-                state.dragging = false;
-                state.pointerId = null;
-                try { thumb.releasePointerCapture(e.pointerId); } catch (_) { }
-            }
-            thumb.addEventListener('pointerup', endDrag);
-            thumb.addEventListener('pointercancel', endDrag);
-
-            grid.addEventListener('scroll', () => {
-                if (state.dragging) return;
-                updateThumbFromScroll();
-            });
-
-            // 初始
-            updateThumbFromScroll();
-            renderTicks();
-            renderDots([]);
-
-            // 监听尺寸变化，重绘刻度
-            if (window.ResizeObserver) {
-                const ro = new ResizeObserver(() => {
-                    renderTicks();
-                    renderDots(axis._kmAxisDotsData || []);
-                    updateThumbFromScroll();
-                });
-                ro.observe(axis);
-                ro.observe(grid);
-            }
-
-            axis._kmAxisRenderTicks = renderTicks;
-            axis._kmAxisUpdateThumb = updateThumbFromScroll;
-            axis._kmAxisRenderDots = renderDots;
-        }
-
-        function updateKeyMomentsTimeAxis(moments) {
-            const axis = document.getElementById('km-time-axis');
-            if (!axis || !axis._kmAxisState) return;
-            const state = axis._kmAxisState;
-            const list = Array.isArray(moments) ? moments : (window.allMoments || []);
-            let minTs = Infinity;
-            let maxTs = -Infinity;
-            for (const m of list) {
-                const ts = Number(m?.timestamp);
-                if (!Number.isFinite(ts) || ts <= 0) continue;
-                minTs = Math.min(minTs, ts);
-                maxTs = Math.max(maxTs, ts);
-            }
-            state.minTs = Number.isFinite(minTs) ? minTs : 0;
-            state.maxTs = Number.isFinite(maxTs) ? maxTs : 0;
-
-            // 红色高亮点：按“日期+20分钟桶”聚合，避免点太密
-            const bucketMap = new Map();
-            for (const m of list) {
-                const ts = Number(m?.timestamp);
-                if (!Number.isFinite(ts) || ts <= 0) continue;
-                const key = _kmBucketKeyFromMoment(m, 20);
-                const cur = bucketMap.get(key) || { key, ts, count: 0, hasUser: false };
-                cur.ts = Math.min(cur.ts, ts);
-                cur.count += 1;
-                cur.hasUser = cur.hasUser || (String(m?.source || '') === 'user_anchor');
-                bucketMap.set(key, cur);
-            }
-            const dotsData = Array.from(bucketMap.values()).sort((a, b) => Number(a.ts) - Number(b.ts)).slice(-80);
-            axis._kmAxisDotsData = dotsData;
-
-            if (typeof axis._kmAxisRenderTicks === 'function') axis._kmAxisRenderTicks();
-            if (typeof axis._kmAxisUpdateThumb === 'function') axis._kmAxisUpdateThumb();
-            if (typeof axis._kmAxisRenderDots === 'function') axis._kmAxisRenderDots(dotsData);
-        }
-
-        // Linkography：请求（LLM）生成关系，并在右下角渲染
-        function initLinkographyPanel() {
-            const panel = document.getElementById('km-linkography-panel');
-            if (!panel || panel._kmLinkBound) return;
-            panel._kmLinkBound = true;
-            window._kmLinkographyState = window._kmLinkographyState || { sig: '', timer: null };
-
-            // 可拖动 + 可缩放大小（面板级）
-            initLinkographyDragResize(panel);
-
-            // 图内视图：Ctrl/捏合缩放 + 空白处拖动平移
-            initLinkographyViewInteractions();
-        }
-
-        function initLinkographyDragResize(panel) {
-            const title = document.getElementById('km-linkography-title');
-            const resizer = document.getElementById('km-linkography-resizer');
-            const stage = document.getElementById('keymoments-stage');
-            if (!panel || !title || !resizer || !stage) return;
-            if (panel._kmDragResizeBound) return;
-            panel._kmDragResizeBound = true;
-
-            const key = 'KM_LINKOGRAPHY_PANEL_GEOM_V1';
-            function loadGeom() {
-                try {
-                    const raw = localStorage.getItem(key);
-                    if (!raw) return null;
-                    const obj = JSON.parse(raw);
-                    if (!obj) return null;
-                    return obj;
-                } catch (e) {
-                    return null;
-                }
-            }
-            function saveGeom(geom) {
-                try { localStorage.setItem(key, JSON.stringify(geom)); } catch (e) { }
-            }
-
-            // 初始应用保存的几何信息
-            const g0 = loadGeom();
-            if (g0 && typeof g0 === 'object') {
-                if (Number.isFinite(g0.left)) panel.style.left = `${g0.left}px`;
-                if (Number.isFinite(g0.top)) panel.style.top = `${g0.top}px`;
-                if (Number.isFinite(g0.width)) panel.style.width = `${g0.width}px`;
-                if (Number.isFinite(g0.height)) panel.style.height = `${g0.height}px`;
-                // 从 right/bottom 切换到 left/top 模式
-                panel.style.right = 'auto';
-                panel.style.bottom = 'auto';
-            }
-
-            function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-
-            // 拖动移动：抓住 title
-            let drag = null;
-            title.addEventListener('pointerdown', (e) => {
-                // 避免点到隐藏按钮时触发拖动
-                try {
-                    if (e.target && e.target.closest && e.target.closest('button')) return;
-                } catch (err) { }
-                e.preventDefault();
-                const rect = panel.getBoundingClientRect();
-                const stageRect = stage.getBoundingClientRect();
-                drag = {
-                    pointerId: e.pointerId,
-                    offX: e.clientX - rect.left,
-                    offY: e.clientY - rect.top,
-                    stageRect,
-                };
-                panel.style.right = 'auto';
-                panel.style.bottom = 'auto';
-                try { title.setPointerCapture(e.pointerId); } catch (_) { }
-            });
-
-            title.addEventListener('pointermove', (e) => {
-                if (!drag || drag.pointerId !== e.pointerId) return;
-                const stageRect = drag.stageRect;
-                const w = panel.offsetWidth || 320;
-                const h = panel.offsetHeight || 220;
-                const x = clamp(e.clientX - stageRect.left - drag.offX, 0, Math.max(0, stageRect.width - w));
-                const y = clamp(e.clientY - stageRect.top - drag.offY, 0, Math.max(0, stageRect.height - h));
-                panel.style.left = `${x}px`;
-                panel.style.top = `${y}px`;
-            });
-
-            function endDrag(e) {
-                if (!drag || (e && drag.pointerId !== e.pointerId)) return;
-                drag = null;
-                const left = parseFloat(panel.style.left || '0');
-                const top = parseFloat(panel.style.top || '0');
-                const geom = {
-                    left: Number.isFinite(left) ? left : 0,
-                    top: Number.isFinite(top) ? top : 0,
-                    width: panel.offsetWidth,
-                    height: panel.offsetHeight,
-                };
-                saveGeom(geom);
-                try { title.releasePointerCapture(e.pointerId); } catch (_) { }
-            }
-            title.addEventListener('pointerup', endDrag);
-            title.addEventListener('pointercancel', endDrag);
-
-            // 右下角拖动调整大小
-            let resize = null;
-            resizer.addEventListener('pointerdown', (e) => {
-                e.preventDefault();
-                const rect = panel.getBoundingClientRect();
-                resize = {
-                    pointerId: e.pointerId,
-                    startX: e.clientX,
-                    startY: e.clientY,
-                    startW: rect.width,
-                    startH: rect.height,
-                };
-                try { resizer.setPointerCapture(e.pointerId); } catch (_) { }
-            });
-
-            resizer.addEventListener('pointermove', (e) => {
-                if (!resize || resize.pointerId !== e.pointerId) return;
-                const dx = e.clientX - resize.startX;
-                const dy = e.clientY - resize.startY;
-                const w = clamp(resize.startW + dx, 240, 900);
-                const h = clamp(resize.startH + dy, 160, 700);
-                panel.style.width = `${w}px`;
-                panel.style.height = `${h}px`;
-            });
-
-            function endResize(e) {
-                if (!resize || (e && resize.pointerId !== e.pointerId)) return;
-                resize = null;
-                const left = parseFloat(panel.style.left || '');
-                const top = parseFloat(panel.style.top || '');
-                const geom = {
-                    left: Number.isFinite(left) ? left : 0,
-                    top: Number.isFinite(top) ? top : 0,
-                    width: panel.offsetWidth,
-                    height: panel.offsetHeight,
-                };
-                saveGeom(geom);
-                try { resizer.releasePointerCapture(e.pointerId); } catch (_) { }
-            }
-            resizer.addEventListener('pointerup', endResize);
-            resizer.addEventListener('pointercancel', endResize);
-        }
-
-        function initLinkographyViewInteractions() {
-            const svg = document.getElementById('km-linkography-svg');
-            if (!svg || svg._kmViewBound) return;
-            svg._kmViewBound = true;
-
-            // 视图（viewBox）状态
-            svg._kmView = svg._kmView || { x: 0, y: 0, w: 320, h: 188 };
-
-            function applyView() {
-                const v = svg._kmView;
-                svg.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
-            }
-            applyView();
-
-            // Ctrl/捏合缩放：缩放 viewBox
-            svg.addEventListener('wheel', (e) => {
-                if (!e.ctrlKey) return;
-                e.preventDefault();
-                const v = svg._kmView;
-
-                const rect = svg.getBoundingClientRect();
-                const px = (e.clientX - rect.left) / Math.max(1, rect.width);
-                const py = (e.clientY - rect.top) / Math.max(1, rect.height);
-                const zoomIn = e.deltaY < 0;
-                const factor = zoomIn ? 0.90 : 1.12;
-
-                const nw = Math.max(120, Math.min(2000, v.w * factor));
-                const nh = Math.max(90, Math.min(2000, v.h * factor));
-                // 以鼠标位置为中心缩放
-                v.x = v.x + (v.w - nw) * px;
-                v.y = v.y + (v.h - nh) * py;
-                v.w = nw;
-                v.h = nh;
-                applyView();
-            }, { passive: false });
-
-            // 空白处拖动平移（不影响节点点击）
-            let pan = null;
-            svg.addEventListener('pointerdown', (e) => {
-                if (e.target !== svg) return;
-                e.preventDefault();
-                const v = svg._kmView;
-                const rect = svg.getBoundingClientRect();
-                pan = {
-                    pointerId: e.pointerId,
-                    startX: e.clientX,
-                    startY: e.clientY,
-                    startV: { x: v.x, y: v.y, w: v.w, h: v.h },
-                    rect,
-                };
-                try { svg.setPointerCapture(e.pointerId); } catch (_) { }
-            });
-
-            svg.addEventListener('pointermove', (e) => {
-                if (!pan || pan.pointerId !== e.pointerId) return;
-                const v = svg._kmView;
-                const dx = e.clientX - pan.startX;
-                const dy = e.clientY - pan.startY;
-                const rect = pan.rect;
-                const sx = (dx / Math.max(1, rect.width)) * pan.startV.w;
-                const sy = (dy / Math.max(1, rect.height)) * pan.startV.h;
-                v.x = pan.startV.x - sx;
-                v.y = pan.startV.y - sy;
-                applyView();
-            });
-
-            function endPan(e) {
-                if (!pan || (e && pan.pointerId !== e.pointerId)) return;
-                pan = null;
-                try { svg.releasePointerCapture(e.pointerId); } catch (_) { }
-            }
-            svg.addEventListener('pointerup', endPan);
-            svg.addEventListener('pointercancel', endPan);
-        }
-
-        function scheduleLinkographyUpdate(moments) {
-            const st = window._kmLinkographyState || (window._kmLinkographyState = { sig: '', timer: null });
-            const list = Array.isArray(moments) ? moments : (window.allMoments || []);
-            const panel = document.getElementById('km-linkography-panel');
-            const ph = panel?.clientHeight || 220;
-            const approxRows = Math.max(4, Math.min(10, Math.floor((ph - 44) / 26)));
-            const limit = Math.max(10, Math.min(24, approxRows * 2));
-            const tail = list.slice(-limit);
-            const sig = `${limit}|` + tail.map(m => String(m?.id || '')).join('|');
-            if (!sig || sig === st.sig) return;
-            st.sig = sig;
-            if (st.timer) clearTimeout(st.timer);
-            st.timer = setTimeout(() => {
-                fetchLinkography(limit);
-            }, 500);
-        }
-
-        function fetchLinkography(limit) {
-            const svg = document.getElementById('km-linkography-svg');
-            const titleEl = document.getElementById('km-linkography-title');
-            if (!svg) return;
-
-            // ⏳ 显示加载状态
-            if (titleEl && !titleEl.textContent.includes('⏳')) {
-                titleEl.textContent = titleEl.textContent + ' ⏳';
-            }
-
-            fetch(`/api/linkography?limit=${encodeURIComponent(String(limit || 18))}`)
-                .then(r => r.json())
-                .then(data => {
-                    renderLinkography(data);
-                    if (titleEl) titleEl.textContent = '🔗 Linkography';
-                })
-                .catch(err => {
-                    console.error('❌ Linkography fetch failed:', err);
-                    renderLinkography({ status: 'error', nodes: [], edges: [] });
-                    if (titleEl) titleEl.textContent = '🔗 Linkography (Error)';
-                });
-        }
-
-        function renderLinkography(data) {
-            const svg = document.getElementById('km-linkography-svg');
-            if (!svg) return;
-            const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
-            const edges = Array.isArray(data?.edges) ? data.edges : [];
-
-            // 获取面板实际尺寸(响应式)
-            const panel = svg.parentElement;
-            const W = panel ? (panel.offsetWidth || 500) : 500;
-            const H = panel ? (panel.offsetHeight || 188) : 188;
-
-            // 初始化默认 viewBox（如已有交互视图则不重置）
-            if (!svg._kmView) svg._kmView = { x: 0, y: 0, w: W, h: H };
-            svg.setAttribute('viewBox', `${svg._kmView.x} ${svg._kmView.y} ${svg._kmView.w} ${svg._kmView.h}`);
-            svg.innerHTML = '';
-            svg._kmLinkNodes = new Map();
-
-            if (!nodes.length) {
-                const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                t.setAttribute('x', '10');
-                t.setAttribute('y', '24');
-                t.setAttribute('fill', 'rgba(0,0,0,0.55)');
-                t.setAttribute('font-size', '10');
-
-                let msg = '暂无 Linkography';
-                if (data?.status === 'llm_unavailable') msg = 'LLM 未配置';
-                else if (data?.status === 'error') msg = '加载失败 (见控制台)';
-                else if (data?.status) msg = `无数据 (${data.status})`;
-
-                t.textContent = msg;
-                svg.appendChild(t);
-                return;
-            }
-
-            let minTs = Infinity;
-            let maxTs = -Infinity;
-            for (const n of nodes) {
-                const t = Number(n?.t);
-                if (!Number.isFinite(t) || t <= 0) continue;
-                minTs = Math.min(minTs, t);
-                maxTs = Math.max(maxTs, t);
-            }
-            if (!(Number.isFinite(minTs) && Number.isFinite(maxTs) && maxTs > minTs)) {
-                minTs = 0;
-                maxTs = 1;
-            }
-
-            function yOf(ts) {
-                const frac = (Number(ts) - minTs) / (maxTs - minTs);
-                return 12 + (H - 24) * Math.max(0, Math.min(1, frac));
-            }
-
-            function shortLabel(label, maxChars = 12) {
-                const s = String(label || '').trim();
-                if (!s) return '';
-                if (s.length <= maxChars) return s;
-                return s.slice(0, Math.max(0, maxChars - 1)) + '…';
-            }
-
-            // 防重叠：按时间排序后，间距根据节点数自适应，保证都能塞进视窗
-            const sortedNodes = [...nodes].sort((a, b) => Number(a?.t) - Number(b?.t));
-            const pos = new Map();
-            const top = 12;
-            const bottom = H - 12;
-            const nCount = Math.max(1, sortedNodes.length);
-            const maxGap = (bottom - top) / Math.max(1, nCount - 1);
-            // 计算最小间距（加大间距防止重叠）
-            const gap = Math.max(24, Math.min(32, Math.floor(maxGap)));  // 最小间距增加到18防重叠
-            const yList = [];
-            let lastY = -9999;
-            for (let i = 0; i < sortedNodes.length; i++) {
-                const n = sortedNodes[i];
-                let y = yOf(n.t);
-                if (y - lastY < gap) y = lastY + gap;
-                y = Math.max(top, Math.min(bottom, y));
-                yList.push(y);
-                lastY = y;
-            }
-            // 兜底：如果仍然有挤压（比如非常多节点），直接等分
-            if (sortedNodes.length >= 2 && gap <= 16) {  // 提高阈值从12到16
-                for (let i = 0; i < yList.length; i++) {
-                    const frac = i / Math.max(1, yList.length - 1);
-                    yList[i] = top + (bottom - top) * frac;
-                }
-            }
-
-            for (let i = 0; i < sortedNodes.length; i++) {
-                const n = sortedNodes[i];
-                const y = yList[i];
-                // 响应式定位：左列W/4，右列3W/4，确保与中线W/2对齐
-                const x = (i % 2 === 0) ? (W * 0.24) : (W * 0.76);
-                pos.set(String(n.id), { x, y, label: String(n.label || '') });
-            }
-
-            // 背景竖线（提示时间方向）
-            const axis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            axis.setAttribute('x1', String(W / 2));
-            axis.setAttribute('x2', String(W / 2));
-            axis.setAttribute('y1', '10');
-            axis.setAttribute('y2', String(H - 10));
-            axis.setAttribute('stroke', 'rgba(0,0,0,0.15)');
-            axis.setAttribute('stroke-width', '2');
-            svg.appendChild(axis);
-
-            // edges
-            for (const e of edges) {
-                const a = pos.get(String(e.source));
-                const b = pos.get(String(e.target));
-                if (!a || !b) continue;
-                const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                const mx = W / 2;
-                const d = `M ${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`;
-                p.setAttribute('d', d);
-                p.setAttribute('fill', 'none');
-                p.setAttribute('stroke', 'rgba(52, 152, 219, 0.55)');
-                p.setAttribute('stroke-width', '2');
-                p.setAttribute('stroke-linecap', 'round');
-                p.style.cursor = 'pointer';
-                p.addEventListener('click', () => {
-                    focusKeyMomentById(String(e.target || ''));
-                });
-                const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-                title.textContent = `${e.type || ''}：${e.reason || ''}`;
-                p.appendChild(title);
-                svg.appendChild(p);
-            }
-
-            // nodes
-            for (const n of nodes) {
-                const p0 = pos.get(String(n.id));
-                if (!p0) continue;
-                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                g.classList.add('km-link-node');
-                g.dataset.nodeId = String(n.id);
-                g.style.cursor = 'pointer';
-                g.addEventListener('click', () => {
-                    focusKeyMomentById(String(n.id || ''));
-                });
-
-                const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                c.setAttribute('cx', String(p0.x));
-                c.setAttribute('cy', String(p0.y));
-                c.setAttribute('r', '8');
-                c.setAttribute('fill', 'rgba(0,0,0,0.75)');
-                g.appendChild(c);
-
-                const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                const isLeft = Number(p0.x) < (W / 2);
-                tx.setAttribute('x', String(isLeft ? (p0.x - 12) : (p0.x + 12)));
-                tx.setAttribute('y', String(p0.y + 3));
-                tx.setAttribute('font-size', '6');  // 增大字体以显示更多内容
-                tx.setAttribute('font-weight', '700');
-                tx.setAttribute('fill', 'rgba(0,0,0,0.7)');
-                tx.setAttribute('text-anchor', isLeft ? 'end' : 'start');
-                tx.textContent = shortLabel(p0.label, 6);  // 增加到6字显示更多信息
-                g.appendChild(tx);
-
-                const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-                title.textContent = `${n.id}${p0.label ? `\n${p0.label}` : ''}`;
-                g.appendChild(title);
-
-                svg.appendChild(g);
-
-                // 用于外部高亮
-                try { svg._kmLinkNodes.set(String(n.id), g); } catch (e) { }
-            }
-        }
-
-        function _kmCssEscape(s) {
-            const v = String(s || '');
-            if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(v);
-            // 极简兜底：转义引号与反斜杠
-            return v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\'/g, "\\'");
-        }
-
-        function focusKeyMomentById(momentId) {
-            const id = String(momentId || '').trim();
-            if (!id) return;
-            const grid = document.getElementById('keymoments-grid');
-            if (!grid) return;
-
-            // 同步高亮 Linkography 节点
-            try { focusLinkographyNodeById(id); } catch (e) { }
-
-            // 清掉旧高亮
-            try {
-                const old = grid.querySelector('.keymoment-card.km-focus');
-                if (old) old.classList.remove('km-focus');
-            } catch (e) { }
-
-            const sel = `[data-moment-id="${_kmCssEscape(id)}"]`;
-            const el = grid.querySelector(sel);
-            if (!el) {
-                // fallback：用 window.allMoments 找 index
-                const list = window.allMoments || [];
-                const idx = list.findIndex(m => String(m?.id || '') === id);
-                if (idx >= 0) {
-                    const el2 = grid.querySelector(`[data-moment-index="${idx}"]`);
-                    if (el2) {
-                        el2.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                        el2.classList.add('km-focus');
-                        setTimeout(() => { try { el2.classList.remove('km-focus'); } catch (e) { } }, 1400);
-                    }
-                }
-                return;
-            }
-
-            el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-            el.classList.add('km-focus');
-            setTimeout(() => { try { el.classList.remove('km-focus'); } catch (e) { } }, 1400);
-        }
-
-        function focusLinkographyNodeById(momentId) {
-            const id = String(momentId || '').trim();
-            const svg = document.getElementById('km-linkography-svg');
-            if (!svg || !id) return;
-
-            // 清掉旧高亮
-            try {
-                const old = svg.querySelector('.km-link-node.km-link-focus');
-                if (old) old.classList.remove('km-link-focus');
-            } catch (e) { }
-
-            let nodeEl = null;
-            try {
-                if (svg._kmLinkNodes && typeof svg._kmLinkNodes.get === 'function') {
-                    nodeEl = svg._kmLinkNodes.get(id) || null;
-                }
-            } catch (e) { }
-            if (!nodeEl) {
-                nodeEl = svg.querySelector(`.km-link-node[data-node-id="${_kmCssEscape(id)}"]`);
-            }
-            if (!nodeEl) return;
-            nodeEl.classList.add('km-link-focus');
-
-            // 简单“闪一下”
-            setTimeout(() => { try { nodeEl.classList.remove('km-link-focus'); } catch (e) { } }, 1400);
-        }
-
-        function onKeyMomentCardClick(index, ev) {
-            const i = Number(index);
-            if (!Number.isFinite(i)) return;
-            const m = (window.allMoments || [])[i];
-            if (!m) return;
-
-            // 如果点在按钮上，让按钮逻辑处理
-            try {
-                if (ev && ev.target) {
-                    const t = ev.target;
-                    if (t && (t.closest && t.closest('button'))) return;
-                }
-            } catch (e) { }
-
-            try { focusLinkographyNodeById(String(m.id || '')); } catch (e) { }
-            showMomentDetail(m, i);
-        }
-
-        // 旧的关键帧API回退
-        function updateKeyframesFallback() {
-            fetch('/api/keyframes')
-                .then(response => response.json())
-                .then(data => {
-                    const grid = document.getElementById('keymoments-grid');
-                    if (data.keyframes && data.keyframes.length > 0) {
-                        grid.innerHTML = data.keyframes.map((kf, index) => `
-                            <div class="keymoment-card" onclick="showKeyMoment('${kf.url}', '${kf.timestamp}')">
-                                <img src="${kf.url}" alt="Key moment ${index + 1}" 
-                                     onerror="this.parentElement.style.display='none'">
-                                <div class="moment-time">
-                                    <span>${kf.timestamp}</span>
-                                    <span>📷</span>
-                                </div>
-                                <div class="moment-desc">Legacy Snapshot</div>
-                            </div>
-                        `).join('');
-                    }
-                })
-                .catch(e => console.error('Fallback also failed:', e));
-        }
-
-        // 🔴 标记关键时刻 (The Anchor)
-        // 防重复标记的状态
-        let lastMarkTime = 0;
-        let markPressCount = 0;
-        let markDebounceTimer = null;
-        const MARK_WINDOW_MS = 5000; // 5秒时间窗口
-        // 🔴 触发按钮按下红色闪烁 + 涟漪效果
-        function triggerButtonFlash() {
-            console.log('⚡ triggerButtonFlash() executing...');
-
-            const overlay = document.getElementById('button-flash-overlay');
-            console.log('   Overlay element:', overlay);
-
-            if (!overlay) {
-                console.error('❌ button-flash-overlay not found!');
-                return;
-            }
-
-            // 移除旧的动画
-            overlay.classList.remove('active');
-
-            // 强制重绘
-            void overlay.offsetWidth;
-
-            // 触发新动画
-            overlay.classList.add('active');
-            console.log('   ✅ Flash overlay activated');
-
-            // 动画结束后移除class
-            setTimeout(() => {
-                overlay.classList.remove('active');
-                console.log('   ✅ Flash overlay deactivated');
-            }, 1000);
-
-            // 🌊 添加涟漪扩散效果
-            console.log('   🌊 Triggering ripple effect...');
-            triggerRippleEffect();
-        }
-
-        // 🌊 涟漪扩散效果
-        function triggerRippleEffect() {
-            const btn = document.getElementById('mark-moment-btn');
-            if (!btn) return;
-
-            // 获取按钮位置
-            const rect = btn.getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-
-            // 创建涟漪元素
-            const ripple = document.createElement('div');
-            ripple.className = 'button-ripple';
-            ripple.style.left = (centerX - 30) + 'px';  // 初始大小60px，所以偏移30px
-            ripple.style.top = (centerY - 30) + 'px';
-            document.body.appendChild(ripple);
-
-            // 动画结束后移除
-            setTimeout(() => {
-                ripple.remove();
-            }, 1200);
-        }
-
-        // 手动标记关键时刻
-        function markKeyMoment() {
-            console.log('🔴 markKeyMoment() called - triggering flash effect');
-
-            // 🔴 立即触发红色闪烁反馈
-            triggerButtonFlash();
-
-            const btn = document.getElementById('anchor-btn');
-            const noteInput = document.getElementById('moment-note');
-            const note = noteInput ? noteInput.value.trim() : '';
-            const now = Date.now();
-
-            // 检查是否在时间窗口内
-            if (now - lastMarkTime < MARK_WINDOW_MS) {
-                // 在时间窗口内，增加按压计数
-                markPressCount++;
-
-                // 视觉反馈 - 按钮抖动
-                btn.style.animation = 'none';
-                setTimeout(() => {
-                    btn.style.animation = 'pulse 0.3s ease-out';
-                }, 10);
-
-                // 显示提示
-                showToast(`🔥 重要性 +${markPressCount}（${MARK_WINDOW_MS / 1000}秒内重复标记会合并）`, 'info');
-
-                // 清除之前的定时器
-                if (markDebounceTimer) {
-                    clearTimeout(markDebounceTimer);
-                }
-
-                // 重新设置定时器
-                markDebounceTimer = setTimeout(() => {
-                    sendMarkRequest(note, markPressCount);
-                }, 1000); // 1秒后没有新的按压，发送请求
-
-                return;
-            }
-
-            // 新的时间窗口，重置计数
-            lastMarkTime = now;
-            markPressCount = 1;
-
-            // 设置定时器
-            if (markDebounceTimer) {
-                clearTimeout(markDebounceTimer);
-            }
-            markDebounceTimer = setTimeout(() => {
-                sendMarkRequest(note, markPressCount);
-            }, 1000);
-
-            // 立即视觉反馈
-            showToast('🔴 关键时刻标记中...', 'info');
-        }
-
-        function sendMarkRequest(note, pressCount) {
-            const noteInput = document.getElementById('moment-note');
-
-            // 在备注中添加按压次数（如果有多次）
-            let finalNote = note;
-            if (pressCount > 1) {
-                finalNote = `${note}${note ? ' ' : ''}[重要性:${'⭐'.repeat(Math.min(pressCount, 5))}×${pressCount}]`;
-            }
-
-            // 发送标记请求
-            fetch('/api/mark_moment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    note: finalNote,
-                    intensity: pressCount  // 记录按压强度
-                })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // 清空备注输入
-                        if (noteInput) noteInput.value = '';
-
-                        // 显示成功反馈
-                        const intensityMsg = pressCount > 1 ? ` (强度:${pressCount}次)` : '';
-                        showToast(`🔴 关键时刻已标记: ${data.moment.time_str}${intensityMsg}`, 'success');
-
-                        // 立即刷新关键时刻列表
-                        updateKeyMoments();
-
-                        // 重置计数
-                        markPressCount = 0;
-                    } else {
-                        showToast(`❌ 标记失败: ${data.error}`, 'error');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error marking moment:', error);
-                    showToast('❌ 标记失败: 网络错误', 'error');
-                });
-
-            // 视觉反馈 - 灯光特效
-            const btn = document.getElementById('mark-moment-btn');
-            const dot = btn?.querySelector('.record-dot');
-            if (dot) {
-                dot.classList.remove('glow');
-                void dot.offsetWidth; // 触发重绘
-                dot.classList.add('glow');
-            }
-        }
-
-        // 生成叙事
-        function generateNarrative() {
-            showToast('📖 正在生成叙事...', 'info');
-
-            fetch('/api/key_moments/narrative')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        showToast(`❌ ${data.error}`, 'error');
-                        return;
-                    }
-
-                    // 显示叙事弹窗
-                    showNarrativeModal(data);
-                })
-                .catch(error => {
-                    console.error('Error generating narrative:', error);
-                    showToast('❌ 生成叙事失败', 'error');
-                });
-        }
-
-        // 显示叙事弹窗
-        function showNarrativeModal(narrative) {
-            const modal = document.createElement('div');
-            modal.style.cssText = `
-                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-                background: rgba(0,0,0,0.8); display: flex;
-                align-items: center; justify-content: center;
-                z-index: 10000;
-            `;
-
-            const content = document.createElement('div');
-            content.style.cssText = `
-                background: white; border: 3px solid black; max-width: 600px;
-                max-height: 80vh; overflow-y: auto; font-family: 'VT323', monospace;
-            `;
-
-            content.innerHTML = `
-                <div style="height: 28px; background: white; border-bottom: 2px solid black;
-                            display: flex; align-items: center; padding: 0 6px;
-                            background-image: repeating-linear-gradient(45deg, black, black 1px, white 1px, white 2px);">
-                    <div style="width: 18px; height: 18px; border: 2px solid black; background: white; 
-                                margin-left: 6px; cursor: pointer;" onclick="this.closest('div').closest('div').closest('div').remove()"></div>
-                    <div style="position: absolute; left: 50%; transform: translateX(-50%); 
-                                background: white; padding: 0 12px; font-weight: bold;">📖 团队叙事</div>
-                </div>
-                <div style="padding: 16px;">
-                    <h3 style="margin: 0 0 12px 0; font-size: 18px;">📜 叙事摘要</h3>
-                    <p style="color: #333; line-height: 1.6;">${narrative.narrative_summary || '暂无摘要'}</p>
-                    
-                    ${narrative.chapters && narrative.chapters.length > 0 ? `
-                        <h3 style="margin: 16px 0 8px 0; font-size: 16px;">📚 章节</h3>
-                        ${narrative.chapters.map(ch => `
-                            <div style="background: #f5f5f5; padding: 8px; margin: 8px 0; border-left: 3px solid #3498db;">
-                                <strong>${ch.title}</strong> <span style="color: #999; font-size: 12px;">${ch.time_range}</span>
-                                <p style="margin: 4px 0 0 0; color: #666; font-size: 13px;">${ch.description}</p>
-                            </div>
-                        `).join('')}
-                    ` : ''}
-                    
-                    ${narrative.team_insights && narrative.team_insights.length > 0 ? `
-                        <h3 style="margin: 16px 0 8px 0; font-size: 16px;">💡 团队洞察</h3>
-                        <ul style="margin: 0; padding-left: 20px;">
-                            ${narrative.team_insights.map(i => `<li style="color: #27ae60;">${i}</li>`).join('')}
-                        </ul>
-                    ` : ''}
-                    
-                    ${narrative.reflection_questions && narrative.reflection_questions.length > 0 ? `
-                        <h3 style="margin: 16px 0 8px 0; font-size: 16px;">🤔 反思问题</h3>
-                        <ol style="margin: 0; padding-left: 20px;">
-                            ${narrative.reflection_questions.map(q => `<li style="color: #9b59b6;">${q}</li>`).join('')}
-                        </ol>
-                    ` : ''}
-                    
-                    <div style="margin-top: 16px; text-align: center; color: #999; font-size: 11px;">
-                        生成时间: ${narrative.generated_at || '--'} | 总关键时刻: ${narrative.total_moments || 0}
-                    </div>
-                </div>
-            `;
-
-            modal.appendChild(content);
-            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-            document.body.appendChild(modal);
-        }
-
-        // 显示关键时刻详情 (支持视频播放)
-        function showKeyMomentDetail(momentId, hasVideo = false) {
-            fetch('/api/key_moments')
-                .then(response => response.json())
-                .then(data => {
-                    const moment = data.moments.find(m => m.id === momentId);
-                    if (!moment) return;
-
-                    const modal = document.createElement('div');
-                    modal.style.cssText = `
-                        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-                        background: rgba(0,0,0,0.8); display: flex;
-                        align-items: center; justify-content: center;
-                        z-index: 10000; cursor: pointer;
-                    `;
-                    modal.onclick = () => modal.remove();
-
-                    const isUserAnchor = moment.source === 'user_anchor';
-                    const borderColor = isUserAnchor ? '#e74c3c' : '#3498db';
-
-                    const content = document.createElement('div');
-                    content.style.cssText = `
-                        background: white; border: 4px solid ${borderColor}; border-radius: 12px;
-                        max-width: 600px; overflow: hidden; cursor: default;
-                    `;
-                    content.onclick = (e) => e.stopPropagation();
-
-                    // 根据是否有视频显示不同内容
-                    const mediaContent = moment.video_url && moment.video_duration > 0
-                        ? `<video src="${moment.video_url}" controls autoplay loop 
-                               style="width: 100%; max-height: 350px; background: #000;">
-                               您的浏览器不支持视频播放
-                           </video>
-                           <div style="text-align: center; padding: 4px; background: #333; color: #fff; font-size: 11px;">
-                               🎬 视频片段 (${moment.video_duration.toFixed(1)}秒) - 点击播放
-                           </div>`
-                        : `<img src="${moment.image_url}" style="width: 100%; max-height: 300px; object-fit: contain;">`;
-
-                    content.innerHTML = `
-                        ${mediaContent}
-                        <div style="padding: 16px; font-family: 'VT323', monospace;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <span style="font-size: 18px; font-weight: bold;">
-                                    ${isUserAnchor ? '🔴 用户标记' : '🤖 AI识别'}
-                                    ${moment.video_url ? ' 📹' : ''}
-                                </span>
-                                <span style="color: #666;">${moment.time_str}</span>
-                            </div>
-                            ${moment.user_note ? `<p style="background: #fff5f5; padding: 8px; border-left: 3px solid #e74c3c; margin: 8px 0;">📝 ${moment.user_note}</p>` : ''}
-                            ${moment.ai_description ? `<p style="background: #f5f9ff; padding: 8px; border-left: 3px solid #3498db; margin: 8px 0;">🤖 ${moment.ai_description}</p>` : ''}
-                            ${moment.ai_tags && moment.ai_tags.length > 0 ? `
-                                <div style="margin-top: 8px;">
-                                    ${moment.ai_tags.map(tag => `<span style="display: inline-block; background: #eee; padding: 2px 8px; border-radius: 10px; margin: 2px; font-size: 11px;">${tag}</span>`).join('')}
-                                </div>
-                            ` : ''}
-                            <div style="margin-top: 12px; color: #999; font-size: 11px;">
-                                帧号: ${moment.frame_number} | 人数: ${moment.person_count} | 
-                                ${moment.ai_importance ? `重要性: ${(moment.ai_importance * 100).toFixed(0)}%` : ''}
-                                ${moment.video_duration ? ` | 视频: ${moment.video_duration.toFixed(1)}s` : ''}
-                            </div>
-                        </div>
-                    `;
-
-                    modal.appendChild(content);
-                    document.body.appendChild(modal);
-                });
-        }
-
-        // Toast 通知
-        function showToast(message, type = 'info') {
-            const toast = document.createElement('div');
-            const colors = {
-                success: '#27ae60',
-                error: '#e74c3c',
-                info: '#3498db'
-            };
-            toast.style.cssText = `
-                position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
-                background: ${colors[type] || colors.info}; color: white;
-                padding: 12px 24px; border-radius: 8px; font-family: 'VT323', monospace;
-                font-size: 14px; z-index: 10001; box-shadow: 4px 4px 0 rgba(0,0,0,0.3);
-                animation: slideUp 0.3s ease;
-            `;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-
-            setTimeout(() => {
-                toast.style.animation = 'slideDown 0.3s ease';
-                setTimeout(() => toast.remove(), 300);
-            }, 2000);
-        }
-
-        // 显示关键时刻大图 (旧版兼容)
-        function showKeyMoment(path, timestamp) {
-            // 创建模态框显示大图
-            const modal = document.createElement('div');
-            modal.style.cssText = `
-                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-                background: rgba(0,0,0,0.8); display: flex;
-                align-items: center; justify-content: center;
-                z-index: 10000; cursor: pointer;
-            `;
-            modal.onclick = () => modal.remove();
-
-            const img = document.createElement('img');
-            img.src = path;
-            img.style.cssText = `
-                max-width: 90%; max-height: 90%; border: 3px solid white;
-                box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-            `;
-
-            const label = document.createElement('div');
-            label.textContent = `📷 ${timestamp}`;
-            label.style.cssText = `
-                position: absolute; bottom: 20px; left: 50%;
-                transform: translateX(-50%); color: white;
-                font-family: 'Chicago', monospace; font-size: 14px;
-                background: rgba(0,0,0,0.7); padding: 8px 16px;
-                border-radius: 4px;
-            `;
-
-            modal.appendChild(img);
-            modal.appendChild(label);
-            document.body.appendChild(modal);
-        }
-
-        // ============================================================
-        // 🎤 语音转文字 (ASR) 功能 - 使用后端实时 ASR
-        // ============================================================
-
-        let isRecording = false;
-        let asrStartTime = null;
-        let asrDurationInterval = null;
-        let transcriptText = '';
-        let notesUpdateInterval = null;
-        let realtimeASRPollInterval = null;
-        let asrAvailable = false;
-
-        // 检查 ASR 可用性
-        async function checkASRAvailability() {
-            try {
-                const response = await fetch('/api/realtime_asr/status');
-                const data = await response.json();
-                asrAvailable = data.available;
-
-                if (!asrAvailable) {
-                    document.getElementById('asr-start-btn').disabled = true;
-                    document.getElementById('asr-start-btn').style.opacity = '0.5';
-                    document.getElementById('asr-status-text').textContent = data.error || '不可用';
-                    showToast('⚠️ 实时语音识别不可用: ' + (data.error || '未知错误'), 'warning');
-                }
-
-                return asrAvailable;
-            } catch (error) {
-                console.error('检查 ASR 可用性失败:', error);
-                return false;
-            }
-        }
-
-        // 初始化时检查
-        checkASRAvailability();
-
-        // 切换录音状态
-        async function toggleASR() {
-            if (isRecording) {
-                await stopASR();
-            } else {
-                await startASR();
-            }
-        }
-
-        // 开始录音 (使用后端实时 ASR)
-        async function startASR() {
-            try {
-                // 先检查可用性
-                if (!asrAvailable) {
-                    const available = await checkASRAvailability();
-                    if (!available) {
-                        showToast('❌ 实时语音识别不可用', 'error');
-                        return;
-                    }
-                }
-
-                // 调用后端启动实时 ASR
-                const response = await fetch('/api/realtime_asr/start', {
-                    method: 'POST'
-                });
-                const data = await response.json();
-
-                if (!data.success) {
-                    showToast('❌ 启动失败: ' + (data.error || '未知错误'), 'error');
-                    return;
-                }
-
-                isRecording = true;
-                asrStartTime = Date.now();
-
-                // 更新 UI
-                document.getElementById('asr-start-btn').innerHTML = '⏹️ Stop';
-                document.getElementById('asr-start-btn').style.background = 'linear-gradient(145deg, #e74c3c, #c0392b)';
-                document.getElementById('asr-indicator').style.background = '#27ae60';
-                document.getElementById('asr-indicator').style.animation = 'pulse 1s infinite';
-                document.getElementById('asr-status-text').textContent = 'Recording...';
-
-                // 更新时长
-                asrDurationInterval = setInterval(updateASRDuration, 1000);
-
-                // 轮询获取转写结果 (降低到2秒一次，避免高频轮询拖慢本地模型推理)
-                realtimeASRPollInterval = setInterval(pollRealtimeTranscript, 2000);
-
-                // 启动会议纪要生成器 (与课堂录制助手V1.1一致)
-                await startMeetingNotes();
-                // 每60秒自动更新会议纪要
-                notesUpdateInterval = setInterval(updateMeetingNotes, 60000);
-
-                showToast('🎤 Speech recognition started...', 'success');
-
-            } catch (error) {
-                console.error('启动 ASR 失败:', error);
-                showToast('❌ Start failed: ' + error.message, 'error');
-            }
-        }
-
-        // 停止录音
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
+                                // 非手动高光：CardSummary > Summary > Detail > Tagline
+                                core = cardSummary || summary || detail || tagline || '';
+                            }
+                            
+                            if (!core) return '';
+
+                            // 严格按照 Mac 平台项目风格使用 _shorten，并将长度限制在 30 左右
+                            return _shorten(core, 30);
+                        };
+
+                        const oldFingerprint = window._lastRenderedMomentIds || '';
+                        // 保存所有时刻列表供翻页使用
+                        const sorted = [...data.moments].sort((a, b) => {
+                            const ta = Number(a?.timestamp);
+                            const tb = Number(b?.timestamp);
+                            if (!Number.isFinite(ta) && !Number.isFinite(tb)) return 0;
+                            if (!Number.isFinite(ta)) return 1;
+                            if (!Number.isFinite(tb)) return -1;
+                            return ta - tb;
+                        });
+
+                        const _buildCardSummary = (m, isUserAnchor) => {
+                            // 0) 尝试提取"Card Summary/卡片摘要"
+                            const analysis = (m?.analysis || '');
+                            let cardSummary = '';
+                            const sumMatch = analysis.match(/(?:Card Summary|卡片摘要)[:：]\s*(.*?)(?:\n|$)/i);
+                            if (sumMatch) cardSummary = sumMatch[1].trim();
+                            
+                            // If no explicit summary in text, check if ai_description is a short summary
+                            if (!cardSummary && m?.ai_description && m.ai_description.length < 80) {
+                                cardSummary = m.ai_description.trim();
+                            }
+
+                            // 1) 优先使用后端 ai_tagline
+                            const tagline = (m?.ai_tagline || '').trim();
+                            // 2) 从 analysis/ai_description 抽取“详细描述”
+                            const sourceText = (m?.analysis || '').trim() || (m?.ai_description || '').trim();
+                            const detail = _extractDetailFromText(sourceText);
+                            // 3) AI 总结（一句话）
+                            const summaryRaw = (m?.ai_summary || '').trim();
+                            const summary = summaryRaw ? summaryRaw.replace(/\s+/g, ' ') : '';
+
+                            const userNote = (m?.user_note || '').trim();
+                            let core = '';
+
+                            if (isUserAnchor) {
+                                const note = userNote;
+                                const noteLooksLikeTranscript = note.length > 120 || /[，。！？!?]/.test(note) && note.length > 80;
+                                core = noteLooksLikeTranscript ? '' : note;
+
+                                // 补充信息：CardSummary > Summary > Tagline > Detail
+                                const extra = cardSummary || summary || tagline || detail;
+                                if (extra && extra !== core) {
+                                    core = core ? `${core} · ${extra}` : extra;
+                                }
+                            } else {
         async function stopASR() {
             try {
                 // 调用后端停止 ASR
