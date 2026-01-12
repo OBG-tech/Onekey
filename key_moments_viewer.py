@@ -348,34 +348,75 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             overflow-y: auto;
         }
         
-        .moment-actions {
-            display: flex;
-            gap: 8px;
+        /* Expandable details sections */
+        .moment-details {
+            margin-bottom: 10px;
+            border: 1px solid var(--dim);
+            background: rgba(255,255,255,0.02);
         }
         
-        .btn {
-            font-family: 'VT323', monospace;
-            font-size: 15px;
-            padding: 6px 14px;
-            background: var(--bg);
-            color: var(--fg);
-            border: 2px solid var(--dim);
+        .moment-details summary {
+            padding: 8px 10px;
             cursor: pointer;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
+            font-size: 13px;
+            color: #ffd43b;
+            font-weight: bold;
+            user-select: none;
+            list-style: none;
         }
         
-        .btn:hover {
-            background: var(--fg);
-            color: var(--bg);
+        .moment-details summary::-webkit-details-marker {
+            display: none;
         }
         
-        .btn-primary {
-            background: var(--accent);
-            color: var(--bg);
-            border-color: var(--accent);
+        .moment-details summary::before {
+            content: '▶ ';
+            display: inline-block;
+            transition: transform 0.2s;
+        }
+        
+        .moment-details[open] summary::before {
+            transform: rotate(90deg);
+        }
+        
+        .moment-details summary:hover {
+            background: rgba(255,255,255,0.05);
+        }
+        
+        .detail-content {
+            padding: 10px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--fg);
+            max-height: 300px;
+            overflow-y: auto;
+            border-top: 1px solid var(--dim);
+        }
+        
+        /* Framework and Tags */
+        .moment-framework,
+        .moment-tags {
+            font-size: 12px;
+            color: var(--fg);
+            margin-bottom: 8px;
+            padding: 6px 8px;
+            background: rgba(255,255,255,0.03);
+            border-left: 3px solid var(--dim);
+        }
+        
+        .framework-label,
+        .tags-label {
+            color: #ffd43b;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        
+        .moment-tags {
+            border-left-color: var(--ai-color);
+        }
+        
+        .moment-framework {
+            border-left-color: #845ef7;
         }
         
         .empty-state {
@@ -558,6 +599,10 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 const type = getType(m.source);
                 const tag = m.ai_tagline || m.tagline || 'Untitled';
                 const sum = m.ai_description || m.description || 'No summary';
+                const transcript = m.transcript || '';
+                const analysis = m.analysis || '';
+                const framework = m.ai_framework_tags || '';
+                const tags = (m.ai_tags || []).filter(t => t && t.length > 0 && t !== '待处理').join(', ');
                 
                 return `
                     <div class="moment-card ${selectedId === m.id ? 'active' : ''}" id="card-${m.id}" data-id="${m.id}">
@@ -572,6 +617,33 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                             </div>
                             <div class="moment-tagline">${esc(tag)}</div>
                             <div class="moment-summary">${esc(sum)}</div>
+                            
+                            ${transcript ? `
+                            <details class="moment-details">
+                                <summary>🎤 Transcript</summary>
+                                <div class="detail-content">${esc(transcript)}</div>
+                            </details>
+                            ` : ''}
+                            
+                            ${analysis ? `
+                            <details class="moment-details">
+                                <summary>📊 Full Analysis</summary>
+                                <div class="detail-content">${esc(analysis).replace(/\\n/g, '<br>')}</div>
+                            </details>
+                            ` : ''}
+                            
+                            ${framework ? `
+                            <div class="moment-framework">
+                                <span class="framework-label">📋 Framework:</span> ${esc(framework)}
+                            </div>
+                            ` : ''}
+                            
+                            ${tags ? `
+                            <div class="moment-tags">
+                                <span class="tags-label">🏷️ Tags:</span> ${esc(tags)}
+                            </div>
+                            ` : ''}
+                            
                             <div class="moment-actions">
                                 ${hasV ? `<a href="${vUrl}" download class="btn btn-primary">⬇ DOWNLOAD</a>` : ''}
                                 <button class="btn" onclick="copySummary('${m.id}')">📋 COPY</button>
