@@ -12,11 +12,14 @@ import os
 import sys
 import time
 from pathlib import Path
+import json
+import subprocess
 
 
 class MultiCameraRecorder:
-    def __init__(self, camera_indices, layout='horizontal', output_dir='recordings', 
-                 fps=30, resolution=None, show_preview=True, auto_start=False):
+    def __init__(self, camera_indices=None, layout='horizontal', output_dir='recordings',
+                 fps=30, resolution=None, show_preview=True, auto_start=False,
+                 camera_name_contains: str = 'ARC International Camera'):
         """
         初始化多摄像头录制器
         
@@ -28,8 +31,9 @@ class MultiCameraRecorder:
             resolution: 输出分辨率 (width, height)，None为自动
             show_preview: 是否显示预览窗口
             auto_start: 是否自动开始录制
+            camera_name_contains: 摄像头设备名称包含的字符串（用于自动选择摄像头）
         """
-        self.camera_indices = camera_indices
+        self.camera_indices = camera_indices or self._auto_select_camera_indices(camera_name_contains)
         self.layout = layout
         self.output_dir = Path(output_dir)
         self.fps = fps
@@ -284,6 +288,26 @@ class MultiCameraRecorder:
                 cv2.destroyAllWindows()
             
             print("✅ 系统已关闭")
+    
+    @staticmethod
+    def _auto_select_camera_indices(name_contains: str, max_index: int = 20, limit: int = 4):
+        """Auto-select camera indices on Ubuntu by device name."""
+        try:
+            script = os.path.join(os.path.dirname(__file__), 'camera_autoselect.py')
+            out = subprocess.check_output(
+                [sys.executable, script, '--name', name_contains, '--max', str(max_index), '--limit', str(limit)],
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            data = json.loads(out)
+            devices = data.get('devices') or []
+            idxs = [int(d.get('index')) for d in devices if d.get('index') is not None]
+            if idxs:
+                print(f"✅ Auto-selected cameras by name '{name_contains}': {idxs}")
+                return idxs
+        except Exception as e:
+            print(f"⚠️ Auto-select cameras failed: {e}")
+        return [0]
 
 
 def main():
@@ -306,8 +330,10 @@ def main():
         """
     )
     
-    parser.add_argument('--cameras', type=str, required=True,
+    parser.add_argument('--cameras', type=str, default='',
                        help='摄像头索引列表，逗号分隔，如: 0,1,2')
+    parser.add_argument('--camera-name', type=str, default='ARC International Camera',
+                       help='摄像头设备名称包含的字符串（用于自动选择摄像头）')
     parser.add_argument('--layout', type=str, default='horizontal',
                        choices=['horizontal', 'vertical', 'grid'],
                        help='拼接布局 (默认: horizontal)')
@@ -315,7 +341,7 @@ def main():
                        help='录制文件保存目录 (默认: recordings)')
     parser.add_argument('--fps', type=int, default=30,
                        help='录制帧率 (默认: 30)')
-    parser.add_argument('--resolution', type=str,
+    parser.add_argument('--resolution', type=str, default='1280x720',
                        help='输出分辨率，格式: WIDTHxHEIGHT，如: 1920x1080')
     parser.add_argument('--show-preview', action='store_true', default=True,
                        help='显示预览窗口 (默认: 启用)')
@@ -325,39 +351,30 @@ def main():
                        help='自动开始录制')
     
     args = parser.parse_args()
-    
-    # 解析摄像头索引
+
+    camera_indices = None
+    if (args.cameras or '').strip():
+        camera_indices = [int(x.strip()) for x in args.cameras.split(',') if x.strip()]
+
+    # parse resolution
+    out_w, out_h = None, None
     try:
-        camera_indices = [int(x.strip()) for x in args.cameras.split(',')]
-    except ValueError:
-        print("❌ 错误: 摄像头索引必须是数字，用逗号分隔")
-        sys.exit(1)
-    
-    # 解析分辨率
-    resolution = None
-    if args.resolution:
-        try:
-            w, h = args.resolution.lower().split('x')
-            resolution = (int(w), int(h))
-        except ValueError:
-            print("❌ 错误: 分辨率格式应为 WIDTHxHEIGHT，如: 1920x1080")
-            sys.exit(1)
-    
-    # 显示预览选项
-    show_preview = not args.no_preview
-    
-    # 创建录制器
+        if args.resolution and 'x' in args.resolution:
+            out_w, out_h = [int(x) for x in args.resolution.lower().split('x', 1)]
+    except Exception:
+        out_w, out_h = 1280, 720
+
     recorder = MultiCameraRecorder(
         camera_indices=camera_indices,
-        layout=args.layout,
-        output_dir=args.output_dir,
-        fps=args.fps,
-        resolution=resolution,
-        show_preview=show_preview,
-        auto_start=args.auto_start
+        layout=getattr(args, 'layout', 'horizontal'),
+        output_dir=getattr(args, 'output_dir', 'recordings'),
+        fps=int(args.fps),
+        resolution=(out_w, out_h) if out_w and out_h else (1280, 720),
+        show_preview=not getattr(args, 'no_preview', False),
+        auto_start=getattr(args, 'auto_start', False),
+        camera_name_contains=args.camera_name,
     )
-    
-    # 运行
+
     recorder.run()
 
 

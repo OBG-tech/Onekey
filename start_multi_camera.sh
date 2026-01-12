@@ -22,18 +22,21 @@ else
 fi
 
 # 默认参数
-CAMERAS="${CAMERAS:-0,1,2}"
+# Ubuntu22.04: 推荐留空让程序按设备名自动选择（ARC International Camera）
+CAMERAS="${CAMERAS:-}"
 LAYOUT="${LAYOUT:-horizontal}"
 OUTPUT_DIR="${OUTPUT_DIR:-./recordings}"
 FPS="${FPS:-30}"
+RESOLUTION="${RESOLUTION:-1280x720}"
+CAMERA_NAME="${CAMERA_NAME:-ARC International Camera}"
 SHOW_PREVIEW="${SHOW_PREVIEW:-true}"
 AUTO_START="${AUTO_START:-false}"
 
 # 显示配置
 echo "📋 当前配置:"
-echo "  摄像头: $CAMERAS"
-echo "  布局: $LAYOUT"
-echo "  输出目录: $OUTPUT_DIR"
+echo "  摄像头: ${CAMERAS:-<auto>}"
+echo "  相机名匹配: $CAMERA_NAME"
+echo "  输出分辨率: $RESOLUTION"
 echo "  帧率: $FPS FPS"
 echo "  预览: $SHOW_PREVIEW"
 echo "  自动录制: $AUTO_START"
@@ -80,7 +83,12 @@ if [ "$1" == "--interactive" ] || [ "$1" == "-i" ]; then
 fi
 
 # 构建命令
-CMD="python multi_camera_recording.py --cameras $CAMERAS --layout $LAYOUT --output-dir $OUTPUT_DIR --fps $FPS"
+CMD="python multi_camera_recording.py --layout $LAYOUT --output-dir $OUTPUT_DIR --fps $FPS --resolution $RESOLUTION --camera-name \"$CAMERA_NAME\""
+
+# 仅当用户显式设置 CAMERAS 时才传 --cameras
+if [ -n "$CAMERAS" ]; then
+    CMD="$CMD --cameras $CAMERAS"
+fi
 
 if [ "$SHOW_PREVIEW" != "true" ]; then
     CMD="$CMD --no-preview"

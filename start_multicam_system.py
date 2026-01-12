@@ -37,12 +37,16 @@ print("=" * 60)
 # 解析参数
 import argparse
 parser = argparse.ArgumentParser(description='多摄像头集成系统')
-parser.add_argument('--cameras', type=str, default='0,1,2,3',
-                   help='摄像头索引，逗号分隔 (默认: 0,1,2,3)')
-parser.add_argument('--fps', type=int, default=60,
-                   help='目标帧率 (默认: 60)')
-parser.add_argument('--resolution', type=str, default='1920x1080',
-                   help='每个摄像头的分辨率 (默认: 1920x1080)')
+parser.add_argument('--cameras', type=str, default='',
+                   help='摄像头索引，逗号分隔；留空则自动选择可用摄像头 (例如: 0,2,4,6)')
+parser.add_argument('--camera-name', type=str, default='LRCP',
+                   help='自动选择时按 V4L2 名称子串匹配 (默认: LRCP)')
+parser.add_argument('--camera-vidpid', type=str, default='05a3:9230',
+                   help='自动选择时按 USB vid:pid 过滤 (默认: 05a3:9230)')
+parser.add_argument('--fps', type=int, default=30,
+                   help='目标帧率 (默认: 30)')
+parser.add_argument('--resolution', type=str, default='1280x720',
+                   help='每个摄像头的分辨率 (默认: 1280x720)')
 parser.add_argument('--port', type=int, default=8082,
                    help='Web服务器端口 (默认: 8082)')
 parser.add_argument('--test', action='store_true',
@@ -54,12 +58,26 @@ parser.add_argument('--record-dir', type=str, default='recordings',
 
 args, remaining_args = parser.parse_known_args()
 
-# 解析摄像头索引（过滤空字符串）
-camera_indices = [int(x.strip()) for x in args.cameras.split(',') if x.strip()]
+# 解析摄像头索引（允许留空=自动选择）
+camera_indices = [int(x.strip()) for x in (args.cameras or '').split(',') if x.strip()]
 
 if not camera_indices:
-    print("❌ 错误：未指定有效的摄像头索引")
-    print("   请输入如: 0,1 或 0,1,2,3")
+    # 自动选择：优先选择“能被 OpenCV 打开的 capture 节点”，避免选到 1/3/5/7 这类子节点
+    try:
+        import json, subprocess
+        out = subprocess.check_output(
+            [sys.executable, 'camera_autoselect.py', '--name', args.camera_name, '--vidpid', args.camera_vidpid, '--limit', '4'],
+            text=True,
+        )
+        data = json.loads(out)
+        camera_indices = [int(d['index']) for d in data.get('devices', [])]
+    except Exception:
+        camera_indices = []
+
+if not camera_indices:
+    print("❌ 错误：未找到可用摄像头")
+    print(f"   自动选择条件: name~{args.camera_name!r}, vidpid={args.camera_vidpid!r}")
+    print("   提示：可用节点通常类似 0,2,4,6（避免 1,3,5,7）")
     sys.exit(1)
 
 # 解析分辨率

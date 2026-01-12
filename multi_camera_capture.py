@@ -4,6 +4,7 @@
 支持4摄像头2x2拼接，高画质，高帧率
 """
 
+import sys
 import cv2
 import numpy as np
 import threading
@@ -11,6 +12,9 @@ import queue
 import time
 from typing import List, Tuple, Optional
 from pathlib import Path
+import os
+import json
+import subprocess
 
 
 class MultiCameraCapture:
@@ -19,9 +23,9 @@ class MultiCameraCapture:
     支持2x2网格布局，高质量输出
     """
     
-    def __init__(self, camera_indices: List[int] = [0, 1, 2, 3], 
-                 target_fps: int = 60,
-                 resolution_per_camera: Tuple[int, int] = (1920, 1080),
+    def __init__(self, camera_indices: List[int] = None,
+                 target_fps: int = 30,
+                 resolution_per_camera: Tuple[int, int] = (1280, 720),
                  enable_recording: bool = False,
                  recording_dir: str = 'recordings'):
         """
@@ -34,6 +38,10 @@ class MultiCameraCapture:
             enable_recording: 是否启用全程录制
             recording_dir: 录制文件保存目录
         """
+        # 如果未指定 camera_indices，则按设备名称自动选择
+        if camera_indices is None:
+            camera_indices = self._auto_select_camera_indices()
+
         self.camera_indices = camera_indices
         self.target_fps = target_fps
         self.resolution = resolution_per_camera
@@ -78,68 +86,80 @@ class MultiCameraCapture:
     def open_cameras(self) -> bool:
         """
         打开所有摄像头并设置高质量参数
-        
+
         Returns:
             True if at least one camera opened successfully
         """
         print("🔌 正在打开摄像头...")
-        
+
+        # 保持 self.cameras 与 self.camera_indices 同长度、同顺序：
+        # 打不开的摄像头用 None 占位，避免后续线程按位置索引越界。
+        self.cameras = []
+        self.frame_queues = []
+
         for idx in self.camera_indices:
-            cap = cv2.VideoCapture(idx)
-            
+            cap = cv2.VideoCapture(idx, cv2.CAP_V4L2)
+
             if cap.isOpened():
                 # 设置高质量参数
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
                 cap.set(cv2.CAP_PROP_FPS, self.target_fps)
-                
+
                 # MJPEG编码以提高质量
                 cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
-                
+
                 # 获取实际设置
                 actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                 actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 actual_fps = cap.get(cv2.CAP_PROP_FPS)
-                
+
                 self.cameras.append(cap)
                 self.frame_queues.append(queue.Queue(maxsize=2))
-                
+
                 print(f"  ✅ 摄像头 #{idx}: {actual_width}x{actual_height} @ {actual_fps:.1f} FPS")
             else:
-                print(f"  ❌ 无法打开摄像头 #{idx}")
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+                self.cameras.append(None)
                 self.frame_queues.append(None)
-        
-        success_count = len(self.cameras)
+                print(f"  ❌ 无法打开摄像头 #{idx}")
+
+        success_count = sum(1 for c in self.cameras if c is not None)
         total_count = len(self.camera_indices)
-        
+
         if success_count == 0:
             print("❌ 没有可用的摄像头")
             return False
-        
+
         if success_count < total_count:
             print(f"⚠️  只有 {success_count}/{total_count} 个摄像头可用")
         else:
             print(f"✅ 所有 {success_count} 个摄像头已就绪\n")
-        
+
         return True
     
-    def _capture_thread(self, camera_idx: int, queue_obj: queue.Queue):
+    def _capture_thread(self, camera_pos: int, queue_obj: queue.Queue):
         """
         单个摄像头的捕获线程
-        
+
         Args:
-            camera_idx: 摄像头索引（在self.cameras中的索引）
+            camera_pos: 摄像头在 self.camera_indices/self.cameras 中的位置（不是 /dev/videoN）
             queue_obj: 该摄像头的帧队列
         """
-        cap = self.cameras[camera_idx]
-        
+        cap = self.cameras[camera_pos]
+        if cap is None:
+            return
+
         while self.is_running:
             ret, frame = cap.read()
             if ret:
                 # 确保尺寸一致
                 if frame.shape[1] != self.resolution[0] or frame.shape[0] != self.resolution[1]:
                     frame = cv2.resize(frame, self.resolution)
-                
+
                 # 非阻塞放入队列
                 try:
                     queue_obj.put(frame, block=False)
@@ -148,28 +168,28 @@ class MultiCameraCapture:
                     try:
                         queue_obj.get_nowait()
                         queue_obj.put(frame, block=False)
-                    except:
+                    except Exception:
                         pass
-            
+
             # 控制帧率
             time.sleep(1.0 / self.target_fps / 2)  # 稍快一点以确保不漏帧
-    
+
     def start_capture_threads(self):
         """启动所有摄像头的捕获线程"""
         self.is_running = True
-        
-        for idx, queue_obj in enumerate(self.frame_queues):
-            if queue_obj is not None:
+
+        for pos, queue_obj in enumerate(self.frame_queues):
+            if queue_obj is not None and self.cameras[pos] is not None:
                 thread = threading.Thread(
-                    target=self._capture_thread, 
-                    args=(idx, queue_obj),
+                    target=self._capture_thread,
+                    args=(pos, queue_obj),
                     daemon=True
                 )
                 thread.start()
                 self.capture_threads.append(thread)
-        
+
         print(f"🎬 启动了 {len(self.capture_threads)} 个捕获线程\n")
-        
+
         # 启动录制
         if self.enable_recording:
             self._start_recording()
@@ -536,6 +556,64 @@ class MultiCameraCapture:
         # 多摄像头模式下，分辨率等参数在初始化时已设定
         # 这里只返回True表示"设置成功"，但实际不做任何改变
         return True
+
+    @staticmethod
+    def _auto_select_camera_indices(
+        name_contains: str = None,
+        max_index: int = 20,
+        limit: int = 4,
+    ) -> List[int]:
+        """Auto-select camera indices on Linux by device name.
+
+        Uses `camera_autoselect.py` (sysfs based). Falls back to best-effort openable
+        indices if selection fails.
+        """
+        needle = (
+            name_contains
+            or os.environ.get("CAMERA_NAME_CONTAINS")
+            or os.environ.get("CAMERA_NAME")
+            or "LRCP"
+        ).strip()
+        vidpid = (os.environ.get("CAMERA_VIDPID") or "05a3:9230").strip()
+
+        cmd = [
+            sys.executable,
+            os.path.join(os.path.dirname(__file__), 'camera_autoselect.py'),
+            '--name', needle,
+            '--max', str(int(max_index)),
+            '--limit', str(int(limit)),
+        ]
+        if vidpid:
+            cmd.extend(['--vidpid', vidpid])
+
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True)
+            data = json.loads(out)
+            devices = data.get('devices') or []
+            idxs = [int(d.get('index')) for d in devices if d.get('index') is not None]
+            if idxs:
+                print(f"✅ Auto-selected cameras by name '{needle}' (vidpid={vidpid or 'any'}): {idxs}")
+                return idxs
+        except Exception as e:
+            print(f"⚠️ Auto-select cameras failed ({needle}, vidpid={vidpid}): {e}")
+
+        # Fallback: try probing indices and pick openable ones
+        best: List[int] = []
+        try:
+            for i in range(int(max_index)):
+                cap = cv2.VideoCapture(i, cv2.CAP_V4L2)
+                if cap.isOpened():
+                    best.append(i)
+                cap.release()
+                if len(best) >= int(limit):
+                    break
+        except Exception:
+            pass
+        if best:
+            print(f"✅ Fallback selected openable cameras: {best}")
+            return best
+
+        return []
 
 
 # 测试代码

@@ -55,9 +55,13 @@ fi
 echo ""
 
 # 默认参数
-CAMERAS="${CAMERAS:-0,1,2,3}"
-FPS="${FPS:-60}"
-RESOLUTION="${RESOLUTION:-1920x1080}"
+# 说明：在 Ubuntu 上建议留空 CAMERAS 以启用自动选择（按名称匹配 V4L2 设备）。
+# 若要手动指定：本机可用节点通常是 0,2,4,6（1,3,5,7 多为不可采集的子节点）。
+CAMERA_NAME="${CAMERA_NAME:-LRCP}"
+CAMERA_VIDPID="${CAMERA_VIDPID:-05a3:9230}"
+CAMERAS="${CAMERAS:-}"
+FPS="${FPS:-30}"
+RESOLUTION="${RESOLUTION:-1280x720}"
 PORT="${PORT:-8082}"
 
 # 交互式模式
@@ -91,7 +95,11 @@ fi
 
 # 显示配置
 echo -e "${YELLOW}📋 当前配置:${NC}"
-echo "  摄像头: $CAMERAS"
+if [ -z "$CAMERAS" ]; then
+    echo "  摄像头: (自动选择: $CAMERA_NAME)"
+else
+    echo "  摄像头: $CAMERAS"
+fi
 echo "  每个摄像头分辨率: $RESOLUTION"
 
 # 计算拼接后分辨率
@@ -105,8 +113,13 @@ echo "  Web端口: $PORT"
 echo ""
 
 # 检查摄像头
+# 当 CAMERAS 为空时，仅列出匹配的设备，不做逐个打开检查（避免脚本在未指定索引时崩溃）。
 echo -e "${BLUE}📹 检测摄像头...${NC}"
-python -c "
+if [ -z "$CAMERAS" ]; then
+    # camera_autoselect.py 已默认输出 JSON
+    python camera_autoselect.py --name "$CAMERA_NAME" --vidpid "$CAMERA_VIDPID" || true
+else
+    python -c "
 import cv2
 cameras = [${CAMERAS}]
 for idx in cameras:
@@ -119,7 +132,8 @@ for idx in cameras:
         cap.release()
     else:
         print(f'  ❌ 摄像头 #{idx}: 无法打开')
-"
+" 
+fi
 
 echo ""
 read -p "确认配置无误，按回车启动 (或Ctrl+C取消)..."
@@ -128,13 +142,21 @@ echo ""
 # 测试模式
 if [ "$1" == "--test" ]; then
     echo -e "${YELLOW}🧪 测试模式：仅预览拼接画面${NC}\n"
-    
-    python start_multicam_system.py \
-        --cameras $CAMERAS \
-        --fps $FPS \
-        --resolution $RESOLUTION \
-        --test
-    
+
+    if [ -z "$CAMERAS" ]; then
+        python start_multicam_system.py \
+            --camera-name "$CAMERA_NAME" \
+            --fps $FPS \
+            --resolution $RESOLUTION \
+            --test
+    else
+        python start_multicam_system.py \
+            --cameras $CAMERAS \
+            --fps $FPS \
+            --resolution $RESOLUTION \
+            --test
+    fi
+
     exit 0
 fi
 
@@ -149,12 +171,21 @@ sleep 2
 echo -e "${GREEN}✅ Key Moments Viewer: http://localhost:8086${NC}\n"
 
 # 启动主系统
-python start_multicam_system.py \
-    --cameras $CAMERAS \
-    --fps $FPS \
-    --resolution $RESOLUTION \
-    --port $PORT \
-    --record
+if [ -z "$CAMERAS" ]; then
+    python start_multicam_system.py \
+        --camera-name "$CAMERA_NAME" \
+        --fps $FPS \
+        --resolution $RESOLUTION \
+        --port $PORT \
+        --record
+else
+    python start_multicam_system.py \
+        --cameras $CAMERAS \
+        --fps $FPS \
+        --resolution $RESOLUTION \
+        --port $PORT \
+        --record
+fi
 
 # 捕获退出状态
 EXIT_CODE=$?
