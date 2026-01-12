@@ -55,9 +55,10 @@ fi
 echo ""
 
 # 默认参数
-CAMERAS="${CAMERAS:-0,1,2,3}"
-FPS="${FPS:-60}"
-RESOLUTION="${RESOLUTION:-1920x1080}"
+# 注意: ARC摄像头每个设备占用2个video节点，只有偶数索引可用于视频捕获
+CAMERAS="${CAMERAS:-0,2,4,6}"
+FPS="${FPS:-30}"  # 默认30 FPS (摄像头支持的最大值)
+RESOLUTION="${RESOLUTION:-1280x720}"  # 默认720p以提高性能
 PORT="${PORT:-8082}"
 
 # 交互式模式

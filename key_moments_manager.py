@@ -597,14 +597,43 @@ class KeyMomentsManager:
         if not body:
             return ""
         lines = [ln.strip() for ln in body.splitlines()]
+        
+        # 尝试多种可能的标记格式
+        patterns = [
+            ("卡片摘要：", "："),
+            ("卡片摘要:", ":"),
+            ("Card Summary:", ":"),
+            ("card summary:", ":"),
+            ("卡片描述：", "："),
+            ("卡片描述:", ":"),
+        ]
+        
         for ln in lines:
-            # 支持中文和英文格式
-            if ln.startswith("卡片摘要：") or ln.startswith("卡片摘要:") or ln.lower().startswith("card summary:"):
-                if "：" in ln:
-                    txt = ln.split("：", 1)[-1].strip()
-                else:
-                    txt = ln.split(":", 1)[-1].strip()
-                return txt
+            for pattern, separator in patterns:
+                if ln.startswith(pattern) or ln.lower().startswith(pattern.lower()):
+                    # 找到匹配的行
+                    if separator in ln:
+                        txt = ln.split(separator, 1)[-1].strip()
+                    else:
+                        # 如果没有分隔符，尝试用":"分割
+                        if ":" in ln:
+                            txt = ln.split(":", 1)[-1].strip()
+                        else:
+                            txt = ln[len(pattern):].strip()
+                    
+                    if txt:
+                        print(f"   🔍 提取到卡片摘要 (模式: {pattern}): {txt[:50]}...")
+                        return txt
+        
+        # 如果没找到标记，尝试查找包含表情符号的行（很可能是摘要）
+        for ln in lines:
+            # 检查是否包含常见的表情符号
+            if any(emoji in ln for emoji in ['🎯', '🔥', '⚡', '🤖', '💡', '🎮', '🧠', '👥', '🎨', '🚀']):
+                # 确保不是标签行（标签通常较短）
+                if 15 < len(ln) < 150 and not ln.startswith('标签'):
+                    print(f"   🔍 根据表情符号推断卡片摘要: {ln[:50]}...")
+                    return ln
+        
         return ""
     
     @staticmethod
@@ -2717,6 +2746,7 @@ Output format strictly as follows (请用中文回复):
                     final_text = ai_analysis
             
             # 更新关键时刻的 AI 分析结果
+            print(f"\n🔍 开始提取AI分析结果...")
             for moment in self.moments:
                 if moment.id == moment_id:
                     tagline, body = self._extract_tagline(final_text)
@@ -2724,11 +2754,21 @@ Output format strictly as follows (请用中文回复):
                     card_summary = self._extract_card_summary(body)  # 提取卡片摘要
                     framework_tags = self._extract_framework_tags(body)
                     
+                    print(f"   📋 提取结果:")
+                    print(f"      标签: {tagline[:50] if tagline else '(空)'}")
+                    print(f"      详细描述: {detail_desc[:50] if detail_desc else '(空)'}")
+                    print(f"      卡片摘要: {card_summary[:50] if card_summary else '(空)'}")
+                    print(f"      框架标签: {framework_tags[:50] if framework_tags else '(空)'}")
+                    
                     # 优先使用card_summary（20-25字）显示在卡片上
-                    #  回退到detail_desc或tagline
+                    # 回退到detail_desc或tagline
                     new_description = (card_summary or "").strip() or (detail_desc or "").strip() or (tagline or "").strip()
+                    
+                    if not new_description:
+                        print(f"   ⚠️ 所有提取方法都失败，使用原始AI输出的前200字符")
+                        new_description = final_text[:200] + "..." if len(final_text) > 200 else final_text
 
-                    moment.ai_tagline = (tagline or "").strip()
+                    moment.ai_tagline = (tagline or "").strip() or "AI分析"
             
                     moment.ai_framework_tags = framework_tags
                     moment.analysis = body
@@ -2769,14 +2809,35 @@ Output format strictly as follows (请用中文回复):
             print(f"⚠️ AI 分析失败: {e}")
             import traceback
             traceback.print_exc()
+            
+            # 详细的错误诊断
+            print(f"\n🔍 AI 分析失败诊断:")
+            print(f"   错误类型: {type(e).__name__}")
+            print(f"   错误消息: {str(e)}")
+            print(f"   LLM 提供商: {self.llm_provider}")
+            print(f"   视觉模型: {self.vision_model}")
+            print(f"   文本模型: {self.text_model}")
+            
+            # 尝试获取部分结果
+            error_description = "AI分析失败"
+            error_analysis = f"[AI分析失败] 错误: {type(e).__name__}: {str(e)}"
+            
+            # 检查是否有部分AI结果（视觉模型可能成功但文本后处理失败）
+            try:
+                if 'ai_analysis' in locals() and ai_analysis:
+                    print(f"   ℹ️ 视觉模型输出存在，尝试使用原始输出")
+                    error_description = ai_analysis[:200] + "..." if len(ai_analysis) > 200 else ai_analysis
+                    error_analysis = ai_analysis
+            except:
+                pass
 
             # 回写一个可见的失败信息，避免前端显示空白
             for moment in self.moments:
                 if moment.id == moment_id:
                     if not (moment.ai_description or "").strip():
-                        moment.ai_description = "AI Analysis Failed"
+                        moment.ai_description = error_description
                     if not (moment.analysis or "").strip():
-                        moment.analysis = "[AI Analysis Failed] No summary generated (model/network/timeout)."
+                        moment.analysis = error_analysis
                     moment.llm_provider = self.llm_provider
                     moment.llm_model = moment.llm_model or (self.vision_model or "")
                     break

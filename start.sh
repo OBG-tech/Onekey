@@ -130,7 +130,7 @@ case $choice in
         ;;
     2)
         echo -e "${GREEN}🎥 启动摄像头模式 (端口: $PORT)...${NC}"
-        python3 integrated_system.py --camera 0 --port $PORT
+        python3 integrated_system.py --camera auto --port $PORT
         ;;
     3)
         read -p "请输入视频文件路径: " video_path

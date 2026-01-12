@@ -85,26 +85,36 @@ class MultiCameraCapture:
         print("🔌 正在打开摄像头...")
         
         for idx in self.camera_indices:
-            cap = cv2.VideoCapture(idx)
+            # 使用V4L2后端以获得更好的控制
+            cap = cv2.VideoCapture(idx, cv2.CAP_V4L2)
             
             if cap.isOpened():
-                # 设置高质量参数
+                # 先设置MJPEG格式（必须在分辨率之前设置）
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+                
+                # 设置分辨率和帧率
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
                 cap.set(cv2.CAP_PROP_FPS, self.target_fps)
                 
-                # MJPEG编码以提高质量
-                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+                # 禁用自动曝光和白平衡以提高稳定性
+                cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+                cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  # 1 = manual mode
+                
+                # 设置缓冲区大小（减少延迟）
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 
                 # 获取实际设置
                 actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                 actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 actual_fps = cap.get(cv2.CAP_PROP_FPS)
+                fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+                fourcc_str = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
                 
                 self.cameras.append(cap)
                 self.frame_queues.append(queue.Queue(maxsize=2))
                 
-                print(f"  ✅ 摄像头 #{idx}: {actual_width}x{actual_height} @ {actual_fps:.1f} FPS")
+                print(f"  ✅ 摄像头 #{idx}: {actual_width}x{actual_height} @ {actual_fps:.1f} FPS [{fourcc_str}]")
             else:
                 print(f"  ❌ 无法打开摄像头 #{idx}")
                 self.frame_queues.append(None)
@@ -287,7 +297,8 @@ class MultiCameraCapture:
         from datetime import datetime
         import subprocess
         import os
-        
+        import platform
+
         # 重置帧计数
         self.frame_count = 0
         self.recording_start_time = None
@@ -327,33 +338,97 @@ class MultiCameraCapture:
             self.video_writer = None
             return
         
-        # 2. 启动音频录制（使用ffmpeg录制系统默认麦克风）
+        # 2. 启动音频录制（ffmpeg）
         try:
-            # macOS使用avfoundation，设备":0"通常是默认麦克风
-            # 可以通过 ffmpeg -f avfoundation -list_devices true -i "" 查看设备列表
-            audio_cmd = [
-                'ffmpeg', '-y',
-                '-f', 'avfoundation',
-                '-i', ':0',  # 默认音频输入设备
-                '-acodec', 'pcm_s16le',
-                '-ar', '44100',
-                '-ac', '2',
-                str(self.audio_filename)
-            ]
-            
-            # 后台启动ffmpeg录音
+            audio_input = os.environ.get("AUDIO_INPUT", "").strip()
+            audio_backend = os.environ.get("AUDIO_BACKEND", "").strip().lower()
+
+            system = platform.system().lower()
+
+            # Default per-OS
+            if system == "darwin":
+                # macOS: avfoundation. ':0' is usually default mic.
+                if not audio_input:
+                    audio_input = ":0"
+                if not audio_backend:
+                    audio_backend = "avfoundation"
+
+                audio_cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    audio_backend,
+                    "-i",
+                    audio_input,
+                    "-acodec",
+                    "pcm_s16le",
+                    "-ar",
+                    "44100",
+                    "-ac",
+                    "2",
+                    str(self.audio_filename),
+                ]
+
+            else:
+                # Linux: prefer PulseAudio, fallback to ALSA.
+                # - PulseAudio device listing: pactl list short sources
+                # - ALSA device listing: arecord -l
+                if not audio_backend:
+                    audio_backend = "pulse"  # typical on Ubuntu desktop
+
+                if audio_backend == "pulse":
+                    if not audio_input:
+                        audio_input = "default"
+                    audio_cmd = [
+                        "ffmpeg",
+                        "-y",
+                        "-f",
+                        "pulse",
+                        "-i",
+                        audio_input,
+                        "-acodec",
+                        "pcm_s16le",
+                        "-ar",
+                        "44100",
+                        "-ac",
+                        "2",
+                        str(self.audio_filename),
+                    ]
+                elif audio_backend == "alsa":
+                    if not audio_input:
+                        audio_input = "default"
+                    audio_cmd = [
+                        "ffmpeg",
+                        "-y",
+                        "-f",
+                        "alsa",
+                        "-i",
+                        audio_input,
+                        "-acodec",
+                        "pcm_s16le",
+                        "-ar",
+                        "44100",
+                        "-ac",
+                        "2",
+                        str(self.audio_filename),
+                    ]
+                else:
+                    raise ValueError(f"Unsupported AUDIO_BACKEND={audio_backend!r}. Use pulse|alsa|avfoundation")
+
+            # 后台启动 ffmpeg 录音
             self.audio_process = subprocess.Popen(
                 audio_cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                stdin=subprocess.PIPE
+                stdin=subprocess.PIPE,
             )
+
             print(f"🎤 音频录制已开始: {self.audio_filename}")
-            print(f"   设备: 系统默认麦克风\n")
-            
+            print(f"   backend={audio_backend}, input={audio_input}\n")
+
         except Exception as e:
-            print(f"⚠️ 音频录制启动失败: {e}")
-            print(f"   将只录制视频（无音频）\n")
+            print(f"⚠️  音频录制启动失败: {e}")
+            print("   将只录制视频（无音频）\n")
             self.audio_process = None
     
     def release(self):

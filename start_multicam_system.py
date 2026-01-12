@@ -37,12 +37,12 @@ print("=" * 60)
 # 解析参数
 import argparse
 parser = argparse.ArgumentParser(description='多摄像头集成系统')
-parser.add_argument('--cameras', type=str, default='0,1,2,3',
-                   help='摄像头索引，逗号分隔 (默认: 0,1,2,3)')
-parser.add_argument('--fps', type=int, default=60,
-                   help='目标帧率 (默认: 60)')
-parser.add_argument('--resolution', type=str, default='1920x1080',
-                   help='每个摄像头的分辨率 (默认: 1920x1080)')
+parser.add_argument('--cameras', type=str, default='0,2,4,6',
+                   help='摄像头索引，逗号分隔 (默认: 0,2,4,6 - ARC摄像头偶数索引)')
+parser.add_argument('--fps', type=int, default=30,
+                   help='目标帧率 (默认: 30, 推荐使用30以获得稳定性)')
+parser.add_argument('--resolution', type=str, default='1280x720',
+                   help='每个摄像头的分辨率 (默认: 1280x720)')
 parser.add_argument('--port', type=int, default=8082,
                    help='Web服务器端口 (默认: 8082)')
 parser.add_argument('--test', action='store_true',

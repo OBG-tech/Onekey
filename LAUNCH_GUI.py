@@ -227,7 +227,7 @@ class IntegratedSystemLauncher:
     def launch_camera(self):
         """启动摄像头模式"""
         cmd = self.get_base_command()
-        cmd.extend(["--camera", "0"])
+        cmd.extend(["--camera", "auto"])  # Ubuntu: 使用 auto 自动选择
         
         self.status_label.config(text="🎥 启动摄像头模式...", fg='#3498db')
         threading.Thread(target=self.launch_process, args=(cmd,), daemon=True).start()

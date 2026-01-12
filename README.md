@@ -91,16 +91,27 @@ cd ~/onekey
 ## 视频分析系统
 ### 🚀 快速开始（30秒上手）
 
-#### 最简单的方式
+#### Ubuntu 22.04 启动方式
 
 ```bash
-# 在Finder中双击这个文件：
-🎬 启动整合系统.command
+# 1. 进入项目目录
+cd ~/onekey
+
+# 2. 激活虚拟环境（如果有）
+source .venv/bin/activate
+
+# 3. 自动选择摄像头启动
+python3 integrated_system.py --camera auto
+
+# 4. 或指定 ARC 摄像头（VID:PID = 05a3:9230）
+export CAMERA_USB_VIDPID=05a3:9230
+python3 integrated_system.py --camera auto
+
+# 5. 或使用图形界面
+python3 LAUNCH_GUI.py
 ```
 
-就这么简单！图形界面会自动打开，点击按钮选择功能即可。
-
-#### 或者使用命令行
+#### macOS 启动方式（原系统）
 
 ```bash
 # 1. 进入项目目录
@@ -189,6 +200,13 @@ python3 LAUNCH_GUI.py              # 图形界面
 实时分析本地摄像头画面
 
 ```bash
+# Ubuntu - 自动选择可用摄像头
+python3 integrated_system.py --camera auto
+
+# Ubuntu - 优先选择 ARC 摄像头 (05a3:9230)
+python3 integrated_system.py --camera auto --camera-usb 05a3:9230
+
+# 或手动指定索引
 python3 integrated_system.py --camera 0
 ```
 
@@ -276,6 +294,9 @@ export VISION_MODEL="claude-3-5-haiku-20241022"
 | `LLM_MODEL`         | 自动     | 文本模型名             |
 | `VISION_MODEL`      | 自动     | 视觉模型名             |
 | `VISION_MODEL_FAST` | 自动     | 快速视觉模型            |
+| `CAMERA_USB_VIDPID` | -      | 摄像头 USB VID:PID (如 `05a3:9230`) |
+| `AUDIO_BACKEND`     | `pulse`| Linux音频: `pulse`/`alsa`, macOS: `avfoundation` |
+| `AUDIO_INPUT`       | `default` | 音频输入设备名 |
 
 ---
 
@@ -305,7 +326,25 @@ export VISION_MODEL="claude-3-5-haiku-20241022"
 
 ### 📺 OBS设置
 
-#### 启用虚拟相机
+#### Ubuntu 22.04 - v4l2loopback 虚拟相机
+
+```bash
+# 1. 安装 v4l2loopback (如未安装)
+sudo apt install v4l2loopback-dkms
+
+# 2. 加载内核模块
+sudo modprobe v4l2loopback devices=1 video_nr=8 card_label="OBS Virtual Camera" exclusive_caps=1
+
+# 3. 启动 OBS Studio
+obs
+
+# 4. 在 OBS 中: 工具(Tools) → 虚拟相机(Virtual Camera) → 启动(Start)
+
+# 5. 启动本系统
+python3 integrated_system.py --obs
+```
+
+#### macOS - 启用虚拟相机
 
 1. 打开 OBS Studio
 2. 工具(Tools) → 虚拟相机(Virtual Camera)
@@ -364,15 +403,35 @@ OBS + 虚拟相机 → 实时分析学生参与度
 
 ### 🐛 常见问题
 
-#### Q: 双击.command文件没反应？
+#### Q: Ubuntu - 找不到摄像头？
+
+```bash
+# 1. 列出所有摄像头
+ls -la /dev/video*
+
+# 2. 查看 USB 摄像头信息
+lsusb | grep Camera
+
+# 3. 使用自动检测
+python3 integrated_system.py --camera auto --camera-usb 05a3:9230
+```
+
+#### Q: Ubuntu - OBS虚拟相机连接不上？
+
+```bash
+# 检查 v4l2loopback 模块
+lsmod | grep v4l2loopback
+
+# 重新加载模块
+sudo modprobe -r v4l2loopback
+sudo modprobe v4l2loopback devices=1 video_nr=8 card_label="OBS Virtual Camera"
+```
+
+#### Q: macOS - 双击.command文件没反应？
 
 ```bash
 chmod +x "🎬 启动整合系统.command"
 ```
-
-#### Q: OBS虚拟相机连接不上？
-
-确保OBS虚拟相机已启动，重启OBS试试
 
 #### Q: 人脸识别不工作？
 

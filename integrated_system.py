@@ -1456,9 +1456,9 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             # 1) 短片段：用于即时展示（不作为全部上下文）
             recent_items = transcript_buffer[-10:] if transcript_buffer else []
             recent_transcript = " ".join([
-                (t.get("text", "") or "").strip()
+                (t.get("text") or "").strip()
                 for t in recent_items
-                if (t.get("text", "") or "").strip()
+                if (t.get("text") or "").strip()
             ])
 
             # 备注兜底：用户没写备注时，用“近期短转写”作为卡片描述，避免前端出现 No description
@@ -2615,11 +2615,25 @@ class VideoSource:
     @staticmethod
     def open_camera(camera_id=0):
         """打开摄像头"""
-        cap = cv2.VideoCapture(camera_id)
+        # 使用V4L2后端并设置MJPEG格式以获得更好的性能和颜色
+        cap = cv2.VideoCapture(camera_id, cv2.CAP_V4L2)
+        
+        # 先设置MJPEG格式（必须在分辨率之前）
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+        
+        # 设置分辨率和帧率
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cap.set(cv2.CAP_PROP_FPS, 30)
+        
+        # 减少缓冲区延迟
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        
         current_stats["stream_mode"] = "camera"
-        return cap, 30
+        
+        # 返回实际FPS
+        actual_fps = cap.get(cv2.CAP_PROP_FPS)
+        return cap, actual_fps if actual_fps > 0 else 30
     
     @staticmethod
     def open_video(video_path):
@@ -3611,10 +3625,44 @@ def shutdown_background_services():
 # 🚀 主程序
 # ============================================================
 
+# ============================================================
+# 📷 Ubuntu/Linux 摄像头自动选择工具
+# ============================================================
+
+def _auto_select_camera_index(prefer_usb_vidpid=None):
+    """自动选择可用摄像头索引 (Ubuntu/Linux)。
+
+    - 扫描 /dev/videoN 索引，通过 OpenCV 测试能否读到一帧。
+    - 若提供 prefer_usb_vidpid（如 '05a3:9230'），优先选择匹配该 VID:PID 的摄像头。
+    
+    Args:
+        prefer_usb_vidpid: 可选的 USB VID:PID (如 '05a3:9230')
+        
+    Returns:
+        int: 可用的摄像头索引
+        
+    Raises:
+        RuntimeError: 没有找到可用摄像头
+    """
+    try:
+        from camera_utils import auto_select_camera_index
+        return auto_select_camera_index(prefer_usb_vidpid=prefer_usb_vidpid, max_index=32)
+    except Exception as e:
+        print(f"⚠️ 自动摄像头选择失败: {e}")
+        raise RuntimeError(f"Failed to auto-select camera: {e}") from e
+
+# ============================================================
+# 🚀 主程序
+# ============================================================
+
 def main():
     parser = argparse.ArgumentParser(description='智能视频分析与人脸追踪整合系统')
     parser.add_argument('--video', '-v', type=str, help='视频文件路径')
-    parser.add_argument('--camera', '-c', type=int, default=0, help='摄像头ID (默认0)')
+    parser.add_argument('--camera', '-c', type=str, default='0', 
+                       help="摄像头ID(如 0/1/2) 或 'auto' 自动选择 (默认: 0)")
+    parser.add_argument('--camera-usb', type=str, 
+                       default=os.environ.get('CAMERA_USB_VIDPID', ''),
+                       help='可选：优先选择匹配该 USB VID:PID 的摄像头（如 05a3:9230）。也可用环境变量 CAMERA_USB_VIDPID')
     parser.add_argument('--obs', action='store_true', help='使用OBS流（虚拟摄像头或RTMP）')
     parser.add_argument('--obs-url', type=str, default='rtmp://localhost/live', 
                        help='OBS RTMP流地址')
@@ -3625,6 +3673,26 @@ def main():
     parser.add_argument('--no-browser', action='store_true', help='不自动打开浏览器')
     
     args = parser.parse_args()
+    
+    # 兼容：camera 参数既可为数字，也可为 'auto'
+    camera_usb = (args.camera_usb or '').strip() or None
+    camera_arg = (args.camera or '').strip().lower()
+    if camera_arg == 'auto':
+        try:
+            args.camera = _auto_select_camera_index(camera_usb)
+            if camera_usb:
+                print(f"📷 自动选择摄像头: index={args.camera} (优先 VID:PID={camera_usb})")
+            else:
+                print(f"📷 自动选择摄像头: index={args.camera}")
+        except RuntimeError as e:
+            print(f"❌ {e}")
+            return
+    else:
+        try:
+            args.camera = int(args.camera)
+        except Exception:
+            print("❌ 参数错误：--camera 必须是整数索引或 'auto'")
+            return
     
     print("╔════════════════════════════════════════════════════════╗")
     print("║   🎬 智能视频分析与人脸追踪整合系统                   ║")
