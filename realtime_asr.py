@@ -128,6 +128,12 @@ class RealtimeASR:
         # provider 选择
         self.asr_provider = os.environ.get("ASR_PROVIDER", "qwen").strip().lower()
 
+        # 语言偏好（用于避免“无日语环境却识别成日语”的问题）
+        # - 对 DashScope: 用 language_hints 控制
+        # - 对 FunASR: 用 model.generate(language=...) 控制
+        # 默认强制中文；如确实需要中英混合，可设 ASR_LANG=zh,en
+        self.asr_lang = os.environ.get("ASR_LANG", "zh").strip().lower()
+
         # 便于状态查询：记录当前模型信息（不保证一定可用，但能回答“现在ASR是什么模型”）
         self.asr_model = ""
         self.asr_model_dir = ""
@@ -489,7 +495,14 @@ class RealtimeASR:
                     infer_start = time.time()
                     
                     # FunASR识别（支持直接输入numpy数组）
-                    result = model.generate(input=audio_np, cache={}, language="auto", use_itn=True)
+                    # 默认强制中文，避免误判成日语
+                    funasr_lang = "auto"
+                    if self.asr_lang in {"zh", "zh-cn", "zh_cn", "chinese", "mandarin"}:
+                        funasr_lang = "zh"
+                    elif "," in self.asr_lang:
+                        # 例如 ASR_LANG=zh,en -> 仍使用 auto（让模型自行判断中英）
+                        funasr_lang = "auto"
+                    result = model.generate(input=audio_np, cache={}, language=funasr_lang, use_itn=True)
                     infer_time = time.time() - infer_start
                     
                     text = ""
@@ -544,14 +557,20 @@ class RealtimeASR:
                 callback.on_event = self._on_event
                 
                 # 创建流式识别对象
-                # 添加语言提示：只识别中文和英文
+                # 添加语言提示：默认只识别中文，尽量避免误转成日语
+                # 如确实要中英混合，可设置 ASR_LANG=zh,en
+                hints = ['zh']
+                if ',' in getattr(self, 'asr_lang', ''):
+                    parts = [p.strip() for p in self.asr_lang.split(',') if p.strip()]
+                    # 仅允许 zh/en，忽略其他
+                    hints = [p for p in parts if p in {'zh', 'en'}] or ['zh']
                 self.recognition = Recognition(
                     model=os.environ.get("ASR_MODEL_REALTIME", 'paraformer-realtime-v2'),
                     format='pcm',
                     sample_rate=16000,
                     callback=callback,
-                    # 语言提示：限制为中文和英文
-                    language_hints=['zh', 'en']
+                    # 语言提示
+                    language_hints=hints
                 )
                 
                 # 启动识别

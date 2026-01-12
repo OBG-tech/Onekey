@@ -1884,7 +1884,7 @@ class KeyMomentsManager:
             self.moments.append(moment)
             self.stats["user_anchors"] += 1
             self.stats["total_moments"] += 1
-            print(f"   鉁? [DEBUG] Moment object created and appended. Total: {len(self.moments)}")
+            print(f"   ✅ [DEBUG] Moment object created and appended. Total: {len(self.moments)}")
             
         except Exception as e:
             print(f"   鉂? [ERROR] Failed to create KeyMoment object: {e}")
@@ -2842,37 +2842,37 @@ class KeyMomentsManager:
             if len(context_excerpt) > 3500:
                 context_excerpt = "[...context truncated...]\n" + context_excerpt[-3500:]
 
-            prompt = f"""You are an "intelligent mirror" that faithfully records what happens at a Maker Marathon/Hackathon event.
+            prompt = f"""你是一面“智能魔镜”，负责忠实记录创客马拉松/Hackathon现场发生的瞬间。
 
-Scene description: This is a Maker Marathon / Hackathon venue (making prototypes, writing code, debugging, discussing solutions).
+场景说明：这是一个创客马拉松/Hackathon现场（制作原型、写代码、调试、讨论方案）。
 
-Core principles - Mirror Observation Method:
-1) **Faithful reflection**: Objectively describe what you see in the frame and what you hear from ASR, without subjective evaluation.
-2) **Concrete and visible**: Describe specific actions, dialogues, expressions, objects, not abstract concepts (e.g., "deep discussion" 鈫? "two people pointing at screen and talking").
-3) **Report what you see**: Write how many people you see, quote the dialogue you hear, describe the actions you observe.
-4) **Full context positioning**: 鈿狅笍 You MUST understand the current moment's position in the overall activity flow based on the complete transcript in [Historical Context], explaining what happened before, what is happening now, and the significance of this moment.
-5) **Admit uncertainty**: If the image is blurry, ASR is empty, or you cannot determine, write "The frame does not show clear activity" or "No voice content".
-6) 鈿狅笍 If [This Segment ASR] is "(no voice)" AND the frame shows no obvious activity, write "No obvious activity in frame", do NOT fabricate content.
+核心原则 - 魔镜观察法：
+1) **如同镜子般忠实反射**：客观描述你从画面中看到的和从ASR中听到的，不带主观评价。
+2) **具体可见**：描述具体的动作、对话、表情、物体，不要使用抽象概念（如“深度讨论”-->“两人指着屏幕交谈”）。
+3) **所见即所报**：看到几个人写几个人，听到什么对话引用什么对话，观察到什么动作写什么动作。
+4) **全语境定位**：⚠️ 必须结合[历史上下文]中的完整转写，理解当前瞬间在整体活动流中的位置，说明之前发生了什么，现在正在做什么，以及此刻的意义。
+5) **承认不确定性**：如果画面模糊、ASR为空或无法判断，直接写“画面未显示明显活动”或“无语音内容”。
+6) ⚠️ 如果[本段ASR]为“(no voice)”且画面无明显活动，写“画面无明显活动”，严禁编造内容。
 
-[Button Reason/Note] {user_note or "(none)"}
+[用户标注/按键原因] {user_note or "(无)"}
 
-[Historical Context (may be truncated)]
-{context_excerpt or "(none)"}
+[历史上下文(可能已截断)]
+{context_excerpt or "(无)"}
 
-[This Segment ASR (may have noise)]
-{transcript_clean or "(no voice)"}
+[本段ASR(可能有噪音)]
+{transcript_clean or "(无语音)"}
 
-鈿狅笍 **Priority Principle**:
-- Voice content > Frame content (voice is the core activity record)
-- If ASR has content, you MUST describe with voice as the main line, frame as supplement
-- Only describe frame purely if ASR is empty
+⚠️ **优先级原则**：
+- 语音内容 > 画面内容（语音是核心活动记录）
+- 如果ASR有内容，必须以语音为主线进行描述，画面为辅
+- 仅在ASR为空时，才纯描述画面
 
-Output format strictly as follows:
-Label: <10-14 words, must include: number of people + specific action/event (prioritize based on voice content) + key object; may include 0-1 related emoji>
-Detailed Description: <2-3 sentences, **prioritize describing voice content**: 鈶營f there is ASR, first quote the dialogue verbatim (Chinese or English) 鈶?Then supplement with frame: number of people, layout, actions 鈶?Visible objects; use short sentences; total 鈮?120 words; prohibited words: "lively", "deep", "sparks" and other abstract terms>
-Analysis Framework Label: <If the dialogue/behavior matches the collaborative learning coding framework, annotate the corresponding label, such as "[R2] Argumentation", "Eng-Flow", "Soc-Help Mutual Aid"; if no obvious framework behavior, write "No framework label">
-Context Positioning: <1-2 sentences, **based on the complete transcript in [Historical Context]**, explain: 鈶燱hat happened before this moment 鈶?Current stage in the overall activity flow 鈶?The role/significance of this moment; write "No historical context" if history is empty>
-Evidence Excerpt: <1-3 items, quote ASR or historical context verbatim, preserve timestamps; write "None" if unavailable>
+请严格按照以下格式输出：
+标题：<10-14字，必须包含：人数+具体动作/事件（优先基于语音内容）+关键物体；可带0-1个相关emoji>
+详细描述：<2-3句，**优先描述语音内容**：①如果有ASR，先原样摘录对话（保留原语言） ②然后补充画面：人数、布局、动作 ③可见物体；使用短句；总字数≤120字；禁用词：“热烈”、“深入”、“火花”等抽象词>
+分析框架标签：<如果对话/行为符合协作学习编码框架，标注对应标签，如“[R2] 论证”、“Eng-Flow 工程流”、“Soc-Help 互助”；主要基于对话内容判断；如无明显框架行为，写“无框架标签”>
+上下文定位：<1-2句，**基于[历史上下文]的完整转写**，说明：①此前发生之事 ②当前处于整体活动流的哪个阶段 ③此刻的作用/意义；如果历史为空写“无历史上下文”>
+证据摘录：<1-3条，原样摘录ASR或历史上下文中的关键句，保留时间戳；如无则写“无”>
 """
 
 
@@ -2888,44 +2888,44 @@ Evidence Excerpt: <1-3 items, quote ASR or historical context verbatim, preserve
             use_text_postprocess = os.environ.get("KEY_MOMENT_TEXT_POSTPROCESS", "1").strip().lower() in {"1", "true", "yes"}
             final_text = ai_analysis
             if use_text_postprocess:
-                refine_prompt = f"""You are an intelligent mirror, objectively organizing the visual model's output.
+                refine_prompt = f"""你是一面智能魔镜，正在客观整理视觉模型的输出。
 
-Scene description: This is a Maker Marathon / Hackathon venue (making prototypes, writing code, debugging, discussing solutions).
+场景说明：这是一个创客马拉松/Hackathon现场（制作原型、写代码、调试、讨论方案）。
 
-You will receive three inputs:
-1) Visual model's interpretation of the frame (may be incomplete/inaccurate)
-2) Historical context (with timestamps, may be truncated)
-3) This segment's ASR text (may have noise)
+你将收到三个输入：
+1) 视觉模型对画面的解读（可能不完整/不准确）
+2) 历史上下文（带时间戳，可能截断）
+3) 本段ASR文本（可能有噪音）
 
-Hard requirements:
-- You can ONLY use text from [Historical Context] and [ASR] as "Evidence Excerpt"; excerpts must be verbatim with timestamps.
-- For the frame, only describe what you "can confirm from the visual interpretation"; if uncertain, write "Cannot determine".
-- Output in English, objective description style: faithfully reflect the frame and dialogue, do not add subjective evaluation.
-- Describe specific visible content, do not use vague abstract vocabulary.
+硬性要求：
+- 你只能使用[历史上下文]和[本段ASR]中的文本作为“证据摘录”；摘录必须原样保留时间戳。
+- 对于画面，只描述你“能从视觉解读中确认”的内容；如不确定，写“无法确定”。
+- **使用中文输出**，保持客观描述风格：忠实反映画面和对话，不添加主观评价。
+- 描述具体可见的内容，不要使用模糊抽象的词汇。
 
-[Button Reason/Note] {user_note or "(none)"}
+[用户标注/按键原因] {user_note or "(无)"}
 
-[Visual Interpretation (from model, may have errors)]
-{(ai_analysis or "").strip() or "(none)"}
+[视觉解读(来自模型，可能有误)]
+{(ai_analysis or "").strip() or "(无)"}
 
-[Historical Context (may be truncated)]
-{context_excerpt or "(none)"}
+[历史上下文(可能截断)]
+{context_excerpt or "(无)"}
 
-[This Segment ASR (may have noise)]
-{transcript_clean or "(no voice/not recognized)"}
+[本段ASR(可能有噪音)]
+{transcript_clean or "(无语音/未识别)"}
 
-鈿狅笍 **Priority Principle**:
-- Voice content > Frame content (voice is the core activity record)
-- If ASR has content, you MUST describe with voice as the main line
-- Only describe frame if ASR is empty
+⚠️ **优先级原则**：
+- 语音内容 > 画面内容（语音是核心活动记录）
+- 如果ASR有内容，必须以语音为主线
+- 仅在ASR为空时才主要描述画面
 
-Output format strictly as follows:
-Label: <10-14 words, must be based on voice content or frame action; may include 0-1 emoji>
-Card Summary: <**MUST be 20-30 words**, vivid and interesting, eye-catching like a news headline! MUST include 1-2 emojis 馃幆. DO NOT start with "Team members", "Participants", "Speaker" 鉂?; Start with verbs or scenes 鉁?. Good examples: "The robot dog finally runs! Breakthrough moment at 4:30am 馃?栤殹锔?", "From virtual games to real creation, this cognitive leap is epic 馃?狆煄?", "3D printing makes creativity tangible, maker barrier drops dramatically 馃洜锔忦煉?"; Bad examples: "Team members discuss technical issues" (too boring 鉂?), "Participants share experiences" (too abstract 鉂?)>
-Detailed Description: <**MUST be 3-5 complete sentences**, total word count **MUST reach 100-150 words**. Prioritize detailed quotation of ASR dialogue (with quotes), then describe frame: specific number of people, positions, actions, expressions, objects. Use coherent narrative style, as if describing the scene to a blind person. Prohibited: abstract vocabulary>
-Analysis Framework Label: <If the dialogue/behavior matches the collaborative learning coding framework (such as [R2] Argumentation, Eng-Flow, Soc-Help, etc.), annotate the corresponding label; if no obvious framework behavior, write "No framework label">
-Context Positioning: <1-2 sentences, **based on the complete transcript in [Historical Context]**, explain: 鈶燱hat happened before this moment 鈶?Current stage in the overall activity flow 鈶?The role/significance of this moment; write "No historical context" if history is empty>
-Evidence Excerpt: <1-3 items, quote ASR or historical context verbatim, preserve timestamps; write "None" if unavailable>
+请严格按照以下格式输出：
+标题：<10-14字，必须基于语音内容或画面动作；可带0-1个emoji>
+卡片摘要：<**必须20-30字**，生动有趣，像新闻标题一样吸引人！必须包含1-2个emoji 🎯。不要以“团队成员”、“参与者”、“演讲者”开头 ❌；以动词或场景开头 ✅。好例子：“机器狗终于跑起来了！凌晨4:30的突破时刻 🦿⚡️”，“从虚拟游戏到实体创造，这次认知飞跃史诗级 🎮➡️”，“3D打印让创意落地，创客门槛大幅降低 🖨️✨”；坏例子：“团队成员讨论技术问题”（太无聊 ❌），“参与者分享经验”（太抽象 ❌）>
+详细描述：<**必须3-5个完整句子**，总字数**必须达到100-150字**。优先详细引用ASR对话（带引号），然后描述画面：具体人数、位置、动作、表情、物体。使用连贯的叙事风格，就像在给盲人现场解说。禁止：抽象词汇>
+分析框架标签：<如果对话/行为符合协作学习编码框架（如 [R2] 论证, Eng-Flow, Soc-Help 等），标注对应标签；如无明显框架行为，写“无框架标签”>
+上下文定位：<1-2句，**基于[历史上下文]的完整转写**，说明：①此前发生之事 ②当前处于整体活动流的哪个阶段 ③此刻的作用/意义；如果历史为空写“无历史上下文”>
+证据摘录：<1-3条，原样摘录ASR或历史上下文中的关键句，保留时间戳；如无则写“无”>
 """
                 try:
                     final_text = self._run_text_llm(

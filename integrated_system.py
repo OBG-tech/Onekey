@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-�9�0 ������Ƶ����������׷������ϵͳ
-��� ONE_KEY �����ܷ��� + multi_person_tracker ��ʵʱ׷��
-֧��: ������Ƶ������ͷ��OBSʵʱ��
+"""🎬 智能视频分析与人脸追踪整合系统
+
+结合 ONE_KEY 的智能分析 + multi_person_tracker 的实时追踪
+支持: 本地视频、摄像头、OBS实时流
 """
 
-print("�7�7 ϵͳ������...", end="\r")
+# 尽量确保控制台输出为 UTF-8，避免出现乱码
+try:
+    import sys
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+print("⏳ 系统启动中...", end="\r")
 
 import cv2
 import os
@@ -24,7 +34,7 @@ from socketserver import ThreadingMixIn
 from collections import defaultdict
 import numpy as np
 
-print("�7�7 ���غ���ģ��...", end="\r")
+print("⏳ 加载核心模块...", end="\r")
 
 # YOLO������ (�ӳٵ���,ֻ��ʹ��ʱ����ģ��)
 from ultralytics import YOLO
@@ -36,14 +46,14 @@ FaceAnalysis = None
 #     # �ӳٵ���,ֻ����Ҫʱ����
 #     import insightface
 #     INSIGHTFACE_AVAILABLE = True
-#     print("�7�3 InsightFace ����ʶ�����")
+#     print("✅ InsightFace 人脸识别可用")
 # except (ImportError, Exception) as e:
 #     INSIGHTFACE_AVAILABLE = False
-#     print(f"�7�2�1�5  InsightFace ������: {e}")
-print("�9�5 ʹ�ô�YOLO׷��ģʽ (InsightFace�ѽ���)")
+#     print(f"⚠️  InsightFace 不可用: {e}")
+print("💡 使用纯YOLO追踪模式 (InsightFace已禁用)")
 
 # ============================================================
-# �9�2 ASR ���ѡ�� (Qwen/DashScope vs FireRedASR)
+# 🎤 ASR 后端选择 (Qwen/DashScope vs FireRedASR)
 # ============================================================
 
 # ASR_PROVIDER:
@@ -97,7 +107,7 @@ def _get_fireredasr_model():
         )
 
     _fireredasr_model_cache = FireRedAsr.from_pretrained(FIREREDASR_ASR_TYPE, model_dir)
-    print(f"�7�3 FireRedASR �Ѽ���: type={FIREREDASR_ASR_TYPE}, dir={model_dir}, gpu={FIREREDASR_USE_GPU}")
+    print(f"✅ FireRedASR 已加载: type={FIREREDASR_ASR_TYPE}, dir={model_dir}, gpu={FIREREDASR_USE_GPU}")
     return _fireredasr_model_cache
 
 def transcribe_audio_with_fireredasr(wav_path: str) -> str:
@@ -155,7 +165,7 @@ def transcribe_audio_with_fireredasr(wav_path: str) -> str:
     try:
         converted_path = _convert_to_wav_16k_mono(wav_path)
         if not converted_path:
-            print("�7�2�1�5 FireRedASR ��Ҫ WAV(16k/mono)���� ffmpeg ת��ʧ��")
+            print("⚠️ FireRedASR 需要 WAV(16k/mono)，但 ffmpeg 转换失败")
             return ""
 
         model = _get_fireredasr_model()
@@ -170,7 +180,7 @@ def transcribe_audio_with_fireredasr(wav_path: str) -> str:
         text = (results[0].get("text") or "").strip()
         return text
     except Exception as e:
-        print(f"�7�2�1�5 FireRedASR תдʧ��: {e}")
+        print(f"⚠️ FireRedASR 转写失败: {e}")
         return ""
     finally:
         try:
@@ -180,7 +190,7 @@ def transcribe_audio_with_fireredasr(wav_path: str) -> str:
             pass
 
 def transcribe_audio(audio_path: str) -> str:
-    """ͳһתд��ڣ����� ASR_PROVIDER ѡ���ˡ�"""
+    """统一转写入口，根据 ASR_PROVIDER 选择后端。"""
     if ASR_PROVIDER == "fireredasr":
         text = transcribe_audio_with_fireredasr(audio_path)
         if text and text.strip():
@@ -202,32 +212,32 @@ try:
             from anthropic import Anthropic
             if CLAUDE_API_KEY:
                 ONEKEY_AI_AVAILABLE = True
-                print("�7�3 Claude Haiku 4.5 API ����")
+                print("✅ Claude Haiku 4.5 API 可用")
             else:
-                print("�7�2�1�5  δ���� ANTHROPIC_API_KEY ����������AI�������ܲ�����")
+                print("⚠️  未设置 ANTHROPIC_API_KEY，AI分析功能不可用")
         except ImportError:
-            print("�7�2�1�5  Anthropic��δ��װ��pip install anthropic����AI�������ܲ�����")
+            print("⚠️  Anthropic 未安装（pip install anthropic），AI分析功能不可用")
     else:
         # Qwen provider (default)
         from openai import OpenAI
         if QWEN_API_KEY:
             ONEKEY_AI_AVAILABLE = True
-            print("�7�3 Qwen API ����")
+            print("✅ Qwen API 可用")
         else:
-            print("�7�2�1�5  δ���� DASHSCOPE_API_KEY ����������AI�������ܲ�����")
+            print("⚠️  未设置 DASHSCOPE_API_KEY，AI分析功能不可用")
 except ImportError:
-    print("�7�2�1�5  OpenAI��δ��װ��AI�������ܲ�����")
+    print("⚠️  OpenAI SDK 未安装，AI分析功能不可用")
 
-# �9�3 ˫��ؼ�ʱ��ʶ��ϵͳ
+# 🎯 双层关键时刻识别系统
 try:
     from key_moments_manager import KeyMomentsManager
     KEY_MOMENTS_AVAILABLE = True
-    print("�7�3 �ؼ�ʱ�̹���������")
+    print("✅ 关键时刻管理器可用")
 except ImportError:
     KEY_MOMENTS_AVAILABLE = False
-    print("�7�2�1�5  �ؼ�ʱ�̹�����δ��װ")
+    print("⚠️  关键时刻管理器不可用")
 
-# �9�2 ʵʱ����ʶ��ϵͳ
+# 🎤 实时语音识别系统
 REALTIME_ASR_AVAILABLE = False
 realtime_asr_engine = None
 PYAUDIO_AVAILABLE = False
@@ -238,44 +248,44 @@ try:
     from realtime_asr import RealtimeASR, PYAUDIO_AVAILABLE, DASHSCOPE_ASR_AVAILABLE, FIREREDASR_ASR_AVAILABLE
     if PYAUDIO_AVAILABLE and (DASHSCOPE_ASR_AVAILABLE or FIREREDASR_ASR_AVAILABLE):
         REALTIME_ASR_AVAILABLE = True
-        print("�7�3 ʵʱ����ʶ�����")
+        print("✅ 实时语音识别可用")
     else:
-        print("�7�2�1�5  ʵʱ����ʶ������������")
+        print("⚠️  实时语音识别依赖不满足")
 except (ImportError, Exception) as e:
-    print(f"�7�2�1�5  ʵʱ����ʶ��ģ�鵼��ʧ��: {e}")
+    print(f"⚠️  实时语音识别模块导入失败: {e}")
 
-# �9�2 ��˷�¼��ϵͳ
+# 🎙️ 麦克风录音系统
 MICROPHONE_AVAILABLE = False
 microphone_recorder = None
 
 try:
     from microphone_recorder import MicrophoneRecorder
     MICROPHONE_AVAILABLE = True
-    print("�7�3 ��˷�¼�ƿ���")
+    print("✅ 麦克风录音可用")
 except (ImportError, Exception) as e:
-    print(f"�7�2�1�5  ��˷�¼��ģ�鵼��ʧ��: {e}")
+    print(f"⚠️  麦克风录音模块导入失败: {e}")
 
-# �9�5 AI�����Ҫϵͳ
+# 📝 AI 会议纪要系统
 MEETING_NOTES_AVAILABLE = False
 meeting_notes_generator = None
 
 try:
     from meeting_notes import MeetingNotesGenerator
     MEETING_NOTES_AVAILABLE = True
-    print("�7�3 AI�����Ҫ����������")
+    print("✅ AI会议纪要模块可用")
 except (ImportError, Exception) as e:
-    print(f"�7�2�1�5  AI�����Ҫģ�鵼��ʧ��: {e}")
+    print(f"⚠️  AI会议纪要模块导入失败: {e}")
 
-# �9�0 AIֱ����ϵͳ
+# 📣 AI 直播解说系统
 AI_LIVE_AVAILABLE = False
 ai_live_commentary = None
 
 try:
     from ai_live_commentary import AILiveCommentary
     AI_LIVE_AVAILABLE = True
-    print("�7�3 AIֱ�������")
+    print("✅ AI直播解说模块可用")
 except (ImportError, Exception) as e:
-    print(f"�7�2�1�5  AIֱ����ģ�鵼��ʧ��: {e}")
+    print(f"⚠️  AI直播解说模块导入失败: {e}")
 
 # ============================================================
 # �9�9 ������
@@ -339,7 +349,6 @@ frame_lock = threading.Lock()  # �߳���
 # �9�0 ��Ƶ��Ƭ������ (���ڶ�ģ̬ AI ����)
 # �ṹ: [{"ts": epoch_seconds, "frame_number": int, "frame": np.ndarray}, ...]
 # ��Ҫ������ֻ�� 30 ֡�������� 30fps/ÿ10֡����=3fps �������ֻ���ǡ�10�룬
-# �ᵼ�¡���Ƭ����������ʱ��㡱����Ƶ��ֻʣ���롢������ȫ����Ӧ��
 video_slice_buffer = []
 
 # Ĭ�ϣ�5fps ������3.5����=1050֡��Ϊ�˿����ڴ棬�洢���ֱ���֡
@@ -506,9 +515,9 @@ class FaceDatabase:
                     self.next_person_id = person_id + 1
             
             if len(self.person_images) > 0:
-                print(f"�7�3 �Ѽ��� {len(self.person_images)} ������ͼƬ")
+                print(f"✅ 已加载 {len(self.person_images)} 个人脸图片")
         except Exception as e:
-            print(f"�7�2�1�5 ��������ͼƬʧ��: {e}")
+            print(f"⚠️ 加载人脸图片失败: {e}")
     
     def find_match(self, embedding, threshold=FACE_MATCH_THRESHOLD):
         """����ƥ�������"""
@@ -895,6 +904,13 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 print(f"   �7�2�1�5 ����ؼ�ʱ��ʱ����: {e}")
         
+        # 退出/停止前打印当前相关进程，便于排查残留
+        try:
+            port = getattr(self.server, 'server_port', None)
+            _print_exit_process_snapshot(web_port=port)
+        except Exception:
+            pass
+
         print("�0�5 ϵͳ����ȫֹͣ")
         
         self.send_json_response({
@@ -1748,6 +1764,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
     
     def _get_meeting_notes(self):
         """��ȡ���ܻ����Ҫ - ��Ϲؼ�ʱ�̺�����תд���ۻ�����"""
+        global meeting_notes_cache
         global meeting_notes_cache, meeting_notes_history, key_moments_manager, transcript_buffer
         
         # ����� key_moments_manager��ʹ����������
@@ -2082,14 +2099,14 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             return {
                 "available": False,
                 "is_generating": False,
-                "message": "AI meeting notes unavailable"
+                "message": "AI 会议纪要不可用"
             }
         
         if meeting_notes_generator is None:
             return {
                 "available": True,
                 "is_generating": False,
-                "message": "Not started"
+                "message": "未启动"
             }
         
         return meeting_notes_generator.get_status()
@@ -2117,7 +2134,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if not MEETING_NOTES_AVAILABLE:
             self.send_json_response({
                 "success": False,
-                "error": "AI meeting notes unavailable"
+                "error": "AI 会议纪要不可用"
             })
             return
         
@@ -2142,7 +2159,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             
             self.send_json_response({
                 "success": success,
-                "message": "AI meeting notes generation started" if success else "Start failed"
+                "message": "AI 会议纪要生成已启动" if success else "启动失败"
             })
             
         except Exception as e:
@@ -2161,7 +2178,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
         if meeting_notes_generator is None:
             self.send_json_response({
                 "success": True,
-                "message": "Meeting notes generator not running"
+                "message": "会议纪要生成器未运行"
             })
             return
         
@@ -2169,7 +2186,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
             meeting_notes_generator.stop()
             self.send_json_response({
                 "success": True,
-                "message": "AI meeting notes generation stopped"
+                "message": "AI 会议纪要生成已停止"
             })
         except Exception as e:
             self.send_json_response({
@@ -2389,7 +2406,7 @@ class IntegratedHandler(SimpleHTTPRequestHandler):
                     self.wfile.write(b'\r\n')
                     self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
-            pass  # �ͻ��˶Ͽ�����
+            pass  # �ͻ��˶Ͽ����
 
 
 # ============================================================
@@ -2414,7 +2431,7 @@ def transcribe_audio_with_qwen(audio_path: str) -> str:
         result = subprocess.run([
             'ffmpeg', '-y', '-i', audio_path, 
             '-ar', '16000', '-ac', '1', '-f', 'wav', wav_path
-        ], capture_output=True, text=True, timeout=30)
+        ], capture_output=True, text=True, errors="replace", timeout=30)
         
         if result.returncode != 0:
             print(f"ffmpeg ת��ʧ��: {result.stderr}")
@@ -3108,7 +3125,7 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
             slice_seconds = float(VIDEO_SLICE_SECONDS) if VIDEO_SLICE_SECONDS and VIDEO_SLICE_SECONDS > 1e-6 else 120.0
 
             # �9�0 ���ӵ�ǰ֡����Ƶ��Ƭ����������ʱ�����������������Ƭ����
-            # ����֡�洢Ϊ���ֱ��ʣ������ڴ汬ը��
+            # ����֡�洢Ϊ���ֱ��ʣ������ڴ汬ы��
             slice_interval = 1.0 / float(VIDEO_SLICE_FPS) if VIDEO_SLICE_FPS > 1e-6 else 0.5
             if (float(current_time) - float(getattr(process_video_stream, '_slice_last_ts', 0.0) or 0.0)) >= slice_interval:
                 process_video_stream._slice_last_ts = float(current_time)
@@ -3119,7 +3136,8 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
                             scale = float(VIDEO_SLICE_FRAME_WIDTH) / float(w)
                             new_w = int(w * scale)
                             new_h = int(h * scale)
-                            frame_small = cv2.resize(frame, (new_w, new_h))
+                            if new_w > 0 and new_h > 0:
+                                frame_small = cv2.resize(frame, (new_w, new_h))
                         else:
                             frame_small = frame
                     else:
@@ -3538,6 +3556,7 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
         
         # ��ʾ���ش��� (�������)
         if show_window:
+           :
             should_display = True
             if is_video_file:
                 should_display = (frame_count % DISPLAY_FRAME_SKIP == 0)
@@ -3590,16 +3609,20 @@ def process_video_stream(cap, video_fps, face_app=None, enable_ai=False, show_wi
             shutdown_background_services()
         except Exception:
             pass
+        # macOS �³�����PyAudio/OpenCV �� native ��Դ�ڽ�������βʱ���� SIGTRAP��
+        # ������һ�Ρ�������ǿ�ˡ������� Trace/BPT trap: 5��
+        # ��Linux��Ҳʹ�� os._exit(0) ��ȷ�������̣߳���ASR��LLM��������ֹ����ֹ����
+        os._exit(0)
         return
 
 
 def shutdown_background_services():
-    """�����ɾ���ֹͣ��̨�߳�/��Ƶ��Դ�������˳������� BPT trap��"""
+    """优雅地停止后台线程/音频资源，并打印退出快照（防止 BPT trap）"""
     global realtime_asr_engine, meeting_notes_generator, key_moments_manager, microphone_recorder
 
-    print("�9�2 Stopping services...", end="\r")
+    print("🛑 Stopping services...", end="\r")
 
-    # ����ֹͣ������I/O�ܼ���ֹͣ����������رա��ļ����棩
+    # 并行停止（因为IO密集；但停止摄像头/麦克风可能阻塞，文件保存）
     import concurrent.futures
     stop_tasks = []
     
@@ -3638,6 +3661,82 @@ def shutdown_background_services():
     except Exception:
         pass
 
+
+def _print_exit_process_snapshot(web_port: int | None = None):
+    """退出前打印当前关键进程快照（便于排查残留进程/端口占用）。
+
+    - 不依赖第三方库；优先使用 ps/lsof；缺失时自动降级。
+    - 只读输出，不做 kill。
+    """
+    import shutil
+    import subprocess
+
+    print("\n" + "=" * 60)
+    print("🧾 退出前进程快照 (debug)")
+
+    # 1) 进程列表：优先列出与本项目相关的可疑残留
+    #    关键词尽量宽松一些，避免漏掉子进程。
+    keywords = [
+        "integrated_system.py",
+        "start_multicam_system.py",
+        "start_multi_camera",
+        "multi_camera",
+        "obs",
+        "ffmpeg",
+        "realtime_asr",
+        "meeting_notes",
+        "esp32_server",
+        "web_viewer.py",
+        "key_moments",
+    ]
+
+    ps = shutil.which("ps")
+    if ps:
+        try:
+            out = subprocess.check_output([ps, "-eo", "pid,ppid,etime,command"], text=True, errors="replace")
+            lines = out.splitlines()
+            header = lines[0] if lines else ""
+            matches = [ln for ln in lines[1:] if any(k in ln for k in keywords)]
+            print("\n[ps] 相关进程 (匹配关键词)")
+            if header:
+                print(header)
+            if matches:
+                for ln in matches[:200]:
+                    print(ln)
+                if len(matches) > 200:
+                    print(f"... (已省略 {len(matches) - 200} 行)")
+            else:
+                print("(未发现匹配进程)")
+        except Exception as e:
+            print(f"[ps] 获取失败: {e}")
+    else:
+        print("[ps] 未找到 ps，跳过进程列表")
+
+    # 2) 端口占用（如果传入 web_port 或者能从环境推断）
+    #    lsof 不是所有系统都默认安装，所以做降级。
+    if web_port is None:
+        try:
+            env_port = os.environ.get("ONEKEY_WEB_PORT")
+            web_port = int(env_port) if env_port else None
+        except Exception:
+            web_port = None
+
+    if web_port:
+        lsof = shutil.which("lsof")
+        if lsof:
+            try:
+                out = subprocess.check_output([lsof, "-nP", f"-iTCP:{web_port}", "-sTCP:LISTEN"], text=True, errors="replace")
+                print(f"\n[lsof] 端口 {web_port} LISTEN")
+                print(out.strip() or "(无输出)")
+            except subprocess.CalledProcessError:
+                print(f"\n[lsof] 端口 {web_port} 未被占用 (或无权限查看)")
+            except Exception as e:
+                print(f"\n[lsof] 查询端口 {web_port} 失败: {e}")
+        else:
+            print(f"\n[lsof] 未找到 lsof，无法查询端口 {web_port} 占用情况")
+
+    print("=" * 60)
+
 # ============================================================
 # �0�4 ������
 # ============================================================
@@ -3657,25 +3756,25 @@ def main():
     
     args = parser.parse_args()
     
-    print("�X�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�[")
-    print("�U   �9�0 ������Ƶ����������׷������ϵͳ                   �U")
-    print("�U   ONE_KEY + multi_person_tracker                      �U")
-    print("�^�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�a\n")
+    print("╔════════════════════════════════════════════════════════╗")
+    print("║   🎬 智能视频分析与人脸追踪整合系统                   ║")
+    print("║   ONE_KEY + multi_person_tracker                      ║")
+    print("╚════════════════════════════════════════════════════════╝\n")
     
-    # �0�4 ��������Web������(�����ɷ��ʽ���)
-    print("�9�4 ����Web������...")
+    # 🚀 优先启动Web服务器（立即可访问界面）
+    print("🌐 启动Web服务器...")
     web_thread = threading.Thread(target=start_web_server, args=(args.port,), daemon=True)
     web_thread.start()
-    time.sleep(0.5)  # ���ٵȴ�ʱ��
+    time.sleep(0.5)  # 减少等待时间
     
-    # �Զ��������
+    # 自动打开浏览器
     web_url = f"http://localhost:{args.port}/integrated%20final.html"
     if not args.no_browser:
-        print(f"�7�3 Web�����Ѿ���: {web_url}")
-        print("�9�5 ��ʾ: ������򿪺�,ϵͳ���ں�̨����ģ��...")
+        print(f"✅ Web服务已就绪: {web_url}")
+        print("💡 提示: 浏览器打开后,系统将在后台加载模型...")
         webbrowser.open(web_url)
     else:
-        print(f"�7�3 Web�����Ѿ���: {web_url}")
+        print(f"✅ Web服务已就绪: {web_url}")
     
     # ��ʼ������ʶ��(�ӳټ���,����������)
     face_app = None
@@ -3752,7 +3851,9 @@ def main():
                     keywords = ["Stop", "stop", "Shut", "shut", "Clos", "clos", 
                                 "��", "ͣ", "��", "Exit", "exit", "End", "end", 
                                 "Saved", "saved", "��", "¼", # ����¼��/���������ʾ
-                                "Server", "server", "����", "Cleaning", "clean"]
+                                "Server", "server", "����", "Cleaning", "clean",
+                                # 退出提示（中文）
+                                "用户", "中断", "退出", "停止", "Ctrl+C", "后台"]
                     # �޸������ٷ��д��հ׷���text.strip() == ""������ֹCtrl+C�����޻س�ˢ��
                     if any(k in text for k in keywords):
                         self.original.write(text)
@@ -3763,7 +3864,14 @@ def main():
             sys.stdout = FilteredStream(sys.stdout)
             sys.stderr = FilteredStream(sys.stderr)
 
-            print("\n�7�3 �û��ж� (Ctrl+C)������ֹͣ��̨����...")
+            print("\n✅ 用户中断 (Ctrl+C)，正在停止后台服务...")
+
+            # 退出前打印当前相关进程，方便排查残留
+            try:
+                _print_exit_process_snapshot(web_port=args.port)
+            except Exception:
+                pass
+
             try:
                 shutdown_background_services()
             except Exception:

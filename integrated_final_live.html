@@ -2454,13 +2454,13 @@
                         </div>
                     </div>
 
-                    <!-- Lower: 📝 AI Meeting Notes -->
+            <!-- Lower: 📝 AI 会议纪要 -->
                     <div id="notes-panel" data-module-id="notes" style="flex: 1; background: #fff; 
                                     border: 2px solid #333; border-top: none;
                                     display: flex; flex-direction: column; overflow: hidden;">
                         <div class="panel-title" data-hide-handle="1" style="padding: 8px 12px; background: #fff; 
                                        border-bottom: 2px solid #333; flex-shrink: 0;">
-                            📝 AI Meeting Notes
+                📝 AI 会议纪要
                             <span style="float: right; font-size: 10px; font-weight: bold;">
                                 <span id="notes-indicator"
                                     style="display: inline-block; width: 8px; height: 8px; background: #ccc; margin-right: 4px; border: 1px solid #333;"></span>
@@ -2472,18 +2472,18 @@
                             <button onclick="generateMeetingNotes()" style="padding: 6px 12px; background: #333; 
                                                color: white; border: 2px solid #333; cursor: pointer;
                                                font-weight: bold; font-size: 12px; transition: all 0.2s;">
-                                🤖 Generate
+                                🤖 生成
                             </button>
                             <select id="notes-mode" style="padding: 6px 10px; border: 2px solid #333; 
                                            font-size: 11px; background: #fff; font-weight: bold;">
-                                <option value="realtime">Realtime</option>
-                                <option value="summary">Summary</option>
+                                <option value="realtime">实时</option>
+                                <option value="summary">摘要</option>
                             </select>
                             <label
                                 style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: #333; cursor: pointer; font-weight: bold;">
                                 <input type="checkbox" id="notes-auto-scroll" checked
                                     style="cursor: pointer; width: 14px; height: 14px; border: 2px solid #333;">
-                                <span>Auto Scroll</span>
+                                <span>自动滚动</span>
                             </label>
                         </div>
                         <div id="meeting-notes-container" style="flex: 1; background: #fff; padding: 12px; overflow-y: auto;
@@ -2491,9 +2491,8 @@
                             <div id="meeting-notes-content">
                                 <div style="color: #999; text-align: center; padding: 20px;">
                                     <div style="font-size: 32px; margin-bottom: 8px;">📋</div>
-                                    <div style="font-size: 13px; font-weight: bold; color: #333;">AI Meeting
-                                        Notes</div>
-                                        <div style="font-size: 11px; margin-top: 4px;">Auto-generated from speech</div>
+                                    <div style="font-size: 13px; font-weight: bold; color: #333;">AI 会议纪要</div>
+                                    <div style="font-size: 11px; margin-top: 4px;">根据语音内容自动生成</div>
                                 </div>
                             </div>
                         </div>
@@ -2638,8 +2637,8 @@
                         <div class="notebook-text" id="detail-transcript">No speech content</div>
                     </div>
                     <div class="notebook-section">
-                        <div class="notebook-label">✨ AI Summary</div>
-                        <div class="notebook-text" id="detail-summary">Analyzing...</div>
+                        <div class="notebook-label">✨ AI 总结</div>
+                        <div class="notebook-text" id="detail-summary">分析中...</div>
                     </div>
                 </div>
             </div>
@@ -2969,7 +2968,7 @@
             return normalized.slice(0, Math.max(0, maxChars - 10)).trimEnd() + '…\n\n(转写较长，已截断显示)';
         };
 
-        // 卡片摘要：要“有意思 + 幽默 + 表情”，但不能把 AI Summary 原文整段贴上
+    // 卡片摘要：要“有意思 + 幽默 + 表情”，但不要把 AI 总结原文整段贴上
         const _hasEmoji = (s) => /[\u{1F300}-\u{1FAFF}]/u.test(String(s || ''));
 
         const _shorten = (s, maxLen) => {
@@ -5253,12 +5252,12 @@
             document.getElementById('meeting-notes-content').innerHTML =
                 '<div style="color: #999; font-style: italic; text-align: center;">' +
                 '<div style="font-size: 24px; margin-bottom: 8px;">📋</div>' +
-                'AI will automatically generate meeting notes based on speech content<br>' +
-                '<span style="font-size: 11px;">Auto-updated periodically</span></div>';
+                'AI 将根据语音内容自动生成会议纪要<br>' +
+                '<span style="font-size: 11px;">会定期自动更新</span></div>';
         }
 
         // ============================================================
-    // 📝 AI Meeting Notes (compatible with Classroom Recorder V1.1)
+    // 📝 AI 会议纪要 (compatible with Classroom Recorder V1.1)
         // ============================================================
 
         // 启动会议纪要生成器
@@ -5304,7 +5303,7 @@
 
             if (currentLength < 30) {
                 // 内容太少，不生成
-                document.getElementById('notes-status-text').textContent = 'Waiting for more content...';
+                document.getElementById('notes-status-text').textContent = '等待更多内容...';
                 return;
             }
 
@@ -5320,7 +5319,7 @@
 
             // 显示更新中状态
             document.getElementById('notes-indicator').style.background = '#f39c12';
-            document.getElementById('notes-status-text').textContent = 'Analyzing...';
+            document.getElementById('notes-status-text').textContent = '分析中...';
 
             try {
                 const response = await fetch('/api/meeting_notes');

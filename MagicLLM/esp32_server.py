@@ -7,8 +7,8 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
-HOST = ''        
-PORT = 5000      
+HOST = os.environ.get('ESP32_SERVER_HOST', '')
+PORT = int(os.environ.get('ESP32_SERVER_PORT', '5000'))
 
 # TCP Keepalive 参数（Linux）
 TCP_KEEPIDLE = 4   # socket.TCP_KEEPIDLE
@@ -20,14 +20,25 @@ LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "button_log.
 
 def trigger_key_moment(button_number):
     """通过 HTTP API 触发关键时刻"""
-    ports = [8083, 8080]  # Try 8083 (multicam) first, then 8080 (default)
+    # integrated_system.py 的 HTTP API（多摄默认 8083）
+    # 可通过环境变量覆盖：ONEKEY_WEB_PORTS="8083,8080" 或 ONEKEY_WEB_PORT=8083
+    ports_env = (os.environ.get('ONEKEY_WEB_PORTS') or '').strip()
+    single_port_env = (os.environ.get('ONEKEY_WEB_PORT') or '').strip()
+    if ports_env:
+        ports = [int(p.strip()) for p in ports_env.split(',') if p.strip().isdigit()]
+    elif single_port_env.isdigit():
+        ports = [int(single_port_env)]
+    else:
+        ports = [8083, 8080]  # Try 8083 (multicam) first, then 8080 (default)
+
+    api_path = (os.environ.get('ONEKEY_MARK_MOMENT_PATH') or '/api/mark_moment').strip() or '/api/mark_moment'
     data = {
         "note": f"Button {button_number} Pressed"
     }
     json_data = json.dumps(data).encode('utf-8')
     
     for port in ports:
-        url = f"http://localhost:{port}/api/mark_moment"
+        url = f"http://localhost:{port}{api_path}"
         try:
             req = urllib.request.Request(
                 url, 
@@ -43,7 +54,7 @@ def trigger_key_moment(button_number):
         except Exception as e:
             print(f"   [Port {port}] Error: {e}")
 
-    print(f"⚠️ 触发关键时刻失败 (尝试端口 {ports}): 请确保 integrated_system.py 正运行在 8080 或 8082 端口")
+    print(f"⚠️ 触发关键时刻失败 (尝试端口 {ports}): 请确保 integrated_system.py 正运行在 {ports[0]} 等端口 (默认多摄 8083)")
 
 def save_button_press(button_number):
     """保存按钮消息和时间到文件"""

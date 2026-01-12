@@ -964,7 +964,7 @@ HTML_TEMPLATE = '''
                 
                 ${data.ai_summary ? `
                 <div class="modal-section">
-                    <h3>🤖 AI Summary</h3>
+                    <h3>🤖 AI 总结</h3>
                     <div style="white-space: pre-wrap; line-height: 1.8;">${data.ai_summary}</div>
                 </div>
                 ` : ''}
@@ -1182,7 +1182,7 @@ def api_moment(folder):
                             if evidence:
                                 ai_summary_parts.append(f"**证据摘录**\n{evidence}")
                         
-                        # 组合完整的 AI Summary
+                        # 组合完整的 AI 总结
                         if ai_summary_parts:
                             data['ai_summary'] = '\n\n'.join(ai_summary_parts)
                 except Exception as e:

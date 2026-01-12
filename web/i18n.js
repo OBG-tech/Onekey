@@ -170,7 +170,7 @@ const translations = {
         'asr_model': 'Model',
         
         // AI Notes
-        'ai_notes': 'AI Meeting Notes',
+    'ai_notes': 'AI 会议纪要',
         'key_points': 'Key Points',
         'todo_items': 'To-Do Items',
         'no_notes': 'No notes yet',
