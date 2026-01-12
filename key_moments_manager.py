@@ -2696,13 +2696,13 @@ Hard requirements:
 - If ASR has content, you MUST describe with voice as the main line
 - Only describe frame if ASR is empty
 
-Output format strictly as follows:
-Label: <10-14 words, must be based on voice content or frame action; may include 0-1 emoji>
-Card Summary: <**MUST be 20-30 words**, vivid and interesting, eye-catching like a news headline! MUST include 1-2 emojis 🎯. DO NOT start with "Team members", "Participants", "Speaker" ❌; Start with verbs or scenes ✅. Good examples: "The robot dog finally runs! Breakthrough moment at 4:30am 🤖⚡️", "From virtual games to real creation, this cognitive leap is epic 🧠🎮", "3D printing makes creativity tangible, maker barrier drops dramatically 🛠️💡"; Bad examples: "Team members discuss technical issues" (too boring ❌), "Participants share experiences" (too abstract ❌)>
-Detailed Description: <**MUST be 3-5 complete sentences**, total word count **MUST reach 100-150 words**. Prioritize detailed quotation of ASR dialogue (with quotes), then describe frame: specific number of people, positions, actions, expressions, objects. Use coherent narrative style, as if describing the scene to a blind person. Prohibited: abstract vocabulary>
-Analysis Framework Label: <If the dialogue/behavior matches the collaborative learning coding framework (such as [R2] Argumentation, Eng-Flow, Soc-Help, etc.), annotate the corresponding label; if no obvious framework behavior, write "No framework label">
-Context Positioning: <1-2 sentences, **based on the complete transcript in [Historical Context]**, explain: ①What happened before this moment ②Current stage in the overall activity flow ③The role/significance of this moment; write "No historical context" if history is empty>
-Evidence Excerpt: <1-3 items, quote ASR or historical context verbatim, preserve timestamps; write "None" if unavailable>
+Output format strictly as follows (请用中文回复):
+标签: <10-14字，必须基于语音内容或画面动作；可包含0-1个表情符号>
+卡片摘要: <**必须20-30字**，生动有趣，像新闻标题一样吸引眼球！必须包含1-2个表情符号🎯。禁止以"团队成员"、"参与者"、"发言人"开头❌；用动词或场景开头✅。好例子："机器狗终于跑起来了！凌晨4:30的突破时刻🤖⚡️"，"从虚拟游戏到实际创作，这次认知飞跃太史诗了🧠🎮"；坏例子："团队成员讨论技术问题"（太无聊❌）>
+详细描述: <**必须3-5句完整句子**，总字数**必须达到100-150字**。优先详细引用ASR对话（带引号），然后描述画面：具体人数、位置、动作、表情、物体。用连贯的叙事风格，就像给盲人描述场景一样。禁止：抽象词汇>
+分析框架标签: <如果对话/行为符合协作学习编码框架（如[R2]论证推理、Eng-Flow、Soc-Help等），标注相应标签；无明显框架行为则写"无框架标签">
+上下文定位: <1-2句话，**基于[历史上下文]中的完整转写**，解释：①该时刻之前发生了什么②当前在整体活动流程中的阶段③该时刻的角色/意义；如无历史则写"无历史上下文">
+证据摘录: <1-3条，逐字引用ASR或历史上下文，保留时间戳；无可用则写"无">
 """
                 try:
                     final_text = self._run_text_llm(
@@ -3078,21 +3078,21 @@ R0-R3: Fleck & Fitzpatrick (2010) Reflection Hierarchy
 
 =================================================================
 
-Please analyze and return in JSON format:
+Please analyze and return in JSON format (请用中文回复所有内容):
 {{
     "is_key_moment": true/false,
-    "importance": 0.0-1.0,
+    "importance": 0.0-1.0 (provide a precise score to 2 decimal places, e.g. 0.37, 0.52, avoid round numbers like 0.3, 0.5),
     "reflection_level": "R0|R1|R2|R3",
     "phase": "Engage|Investigate|Act",
     "primary_dimension": "Engagement|Initiative|Social|Understanding",
     "behavior_code": "L1 behavior code e.g. Eng-Flow/Eng-Emo/Init-Goal/Soc-Help/Und-Aha etc.",
-    "specific_behavior": "Specific sub-behavior e.g. [R2] Argumentation/[R3] Discovery Moment/[R1] Problem Naming etc.",
-    "theoretical_source": "Theoretical source e.g. [IAM] PhII/A/[EVT] Heuristic/[KB] Rise Above etc.",
-    "description": "One sentence describing what is happening (objective, retellable)",
-    "card_summary": "One sentence for key moment card (more colloquial/humorous, can use emojis)",
-    "key_quote": "If there is key dialogue, quote the most important sentence",
-    "observable_evidence": "Observable behavioral evidence",
-    "meeting_note": "Concise record for meeting minutes"
+    "specific_behavior": "具体子行为，如 [R2]论证推理/[R3]发现时刻/[R1]问题命名等",
+    "theoretical_source": "理论来源 e.g. [IAM] PhII/A/[EVT] Heuristic/[KB] Rise Above etc.",
+    "description": "一句话描述正在发生什么（客观、可复述）",
+    "card_summary": "一句话卡片摘要（更口语化/有趣，可用表情符号）",
+    "key_quote": "如有关键对话，引用最重要的一句",
+    "observable_evidence": "可观察的行为证据",
+    "meeting_note": "简明会议纪要记录"
 }}
 
 Return JSON only, no other content."""
