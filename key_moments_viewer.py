@@ -348,6 +348,39 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             overflow-y: auto;
         }
         
+        .moment-section {
+            margin-bottom: 12px;
+            padding: 8px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 4px;
+            border: 1px solid var(--dim);
+        }
+        
+        .section-title {
+            font-family: 'VT323', monospace;
+            font-size: 14px;
+            color: var(--accent);
+            margin-bottom: 6px;
+            font-weight: bold;
+        }
+        
+        .section-content {
+            font-size: 13px;
+            color: var(--fg);
+            line-height: 1.5;
+            max-height: 100px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        .transcript-content {
+            color: #9ecfff;
+        }
+        
+        .analysis-content {
+            color: #baffb0;
+        }
+        
         .moment-actions {
             display: flex;
             gap: 8px;
@@ -558,6 +591,8 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 const type = getType(m.source);
                 const tag = m.ai_tagline || m.tagline || 'Untitled';
                 const sum = m.ai_description || m.description || 'No summary';
+                const transcript = m.transcript || '';
+                const analysis = m.analysis || '';
                 
                 return `
                     <div class="moment-card ${selectedId === m.id ? 'active' : ''}" id="card-${m.id}" data-id="${m.id}">
@@ -572,6 +607,18 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                             </div>
                             <div class="moment-tagline">${esc(tag)}</div>
                             <div class="moment-summary">${esc(sum)}</div>
+                            ${transcript ? `
+                                <div class="moment-section">
+                                    <div class="section-title">🎤 语音识别</div>
+                                    <div class="section-content transcript-content">${esc(transcript)}</div>
+                                </div>
+                            ` : ''}
+                            ${analysis ? `
+                                <div class="moment-section">
+                                    <div class="section-title">🤖 AI总结</div>
+                                    <div class="section-content analysis-content">${esc(analysis)}</div>
+                                </div>
+                            ` : ''}
                             <div class="moment-actions">
                                 ${hasV ? `<a href="${vUrl}" download class="btn btn-primary">⬇ DOWNLOAD</a>` : ''}
                                 <button class="btn" onclick="copySummary('${m.id}')">📋 COPY</button>
@@ -665,10 +712,20 @@ class MomentsHandler(SimpleHTTPRequestHandler):
                     mime_type = 'application/octet-stream'
                 
                 self.send_response(200)
-            self.end_headers()
-            self.wfile.write(json.dumps({'moments': load_moments()}).encode('utf-8'))
-        else:
-            self.send_error(404)
+                self.send_header('Content-Type', mime_type)
+                self.send_header('Content-Length', str(filepath.stat().st_size))
+                self.send_header('Accept-Ranges', 'bytes')
+                self.end_headers()
+                
+                # 发送文件内容
+                with open(filepath, 'rb') as f:
+                    self.wfile.write(f.read())
+                return
+            else:
+                self.send_error(404, f'File not found: {filename}')
+                return
+        
+        self.send_error(404)
 
     def do_POST(self):
         # Proxy API requests to main system

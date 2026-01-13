@@ -928,11 +928,24 @@ class KeyMomentsManager:
                 '-movflags', '+faststart',
                 str(video_path)
             ]
-            process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             for fr, _, _ in clip_frames:
                 process.stdin.write(fr.tobytes())
             process.stdin.close()
-            process.wait(timeout=30)
+            _, stderr = process.communicate(timeout=60)
+
+            # 检查 ffmpeg 是否成功
+            if process.returncode != 0 or not video_path.exists() or video_path.stat().st_size < 10000:
+                print(f"   ⚠️ FFmpeg编码失败 (returncode={process.returncode})，回退到OpenCV...")
+                if stderr:
+                    print(f"   ⚠️ FFmpeg stderr: {stderr.decode('utf-8', errors='ignore')[-500:]}")
+                # 回退到 OpenCV
+                import cv2
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                writer = cv2.VideoWriter(str(video_path), fourcc, est_fps, (w, h))
+                for fr, _, _ in clip_frames:
+                    writer.write(fr)
+                writer.release()
 
             if video_path.exists() and video_path.stat().st_size > 1000:
                 print(f"   🎬 视频片段已保存(切片帧): {video_filename} ({len(clip_frames)}帧, {video_duration:.1f}秒, fps≈{est_fps:.1f})")
@@ -942,7 +955,8 @@ class KeyMomentsManager:
                 except Exception:
                     pass
                 return str(video_path), float(video_duration)
-        except Exception:
+        except Exception as e:
+            print(f"   ⚠️ 视频保存异常: {e}")
             return None, 0
 
         return None, 0
@@ -1805,6 +1819,7 @@ class KeyMomentsManager:
             
             # 使用 ffmpeg 编码
             import subprocess
+            ffmpeg_success = False
             try:
                 ffmpeg_cmd = [
                     'ffmpeg', '-y',
@@ -1817,16 +1832,27 @@ class KeyMomentsManager:
                 ]
                 
                 process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, 
-                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 
                 for frame, _, _ in clip_frames:
                     process.stdin.write(frame.tobytes())
                 
                 process.stdin.close()
-                process.wait(timeout=30)
+                _, stderr = process.communicate(timeout=60)
+                
+                if process.returncode == 0 and video_path.exists() and video_path.stat().st_size > 10000:
+                    ffmpeg_success = True
+                else:
+                    print(f"   ⚠️ FFmpeg编码失败 (returncode={process.returncode})")
+                    if stderr:
+                        print(f"   ⚠️ FFmpeg stderr: {stderr.decode('utf-8', errors='ignore')[-500:]}")
                 
             except Exception as e:
-                # 回退到 OpenCV
+                print(f"   ⚠️ FFmpeg异常: {e}")
+            
+            # 如果 ffmpeg 失败，回退到 OpenCV
+            if not ffmpeg_success:
+                print(f"   🔄 回退到 OpenCV VideoWriter...")
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 writer = cv2.VideoWriter(str(video_path), fourcc, actual_fps, (w, h))
                 for frame, _, _ in clip_frames:
