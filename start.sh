@@ -4,6 +4,7 @@
 
 # 切换到脚本所在目录
 cd "$(dirname "$0")"
+source ./script_common.sh
 
 # 默认端口
 PORT=${1:-8082}
@@ -20,28 +21,17 @@ echo -e "${BLUE}║   🎬 智能视频分析与人脸追踪整合系统        
 echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# 检查虚拟环境
-if [ ! -d ".venv" ]; then
-    echo -e "${RED}❌ 未找到虚拟环境 .venv${NC}"
-    echo -e "${YELLOW}请先运行: ./install_ubuntu.sh${NC}"
-    exit 1
-fi
+ensure_venv || exit 1
 
-# 检查 .env.local 是否存在
-if [ ! -f ".env.local" ]; then
-    if [ -f ".env.local.example" ]; then
-        echo -e "${YELLOW}⚠️  未找到 .env.local，从示例文件创建...${NC}"
-        cp .env.local.example .env.local
-        echo -e "${YELLOW}   请编辑 .env.local 填入您的 DASHSCOPE_API_KEY${NC}"
-    fi
+if [ ! -f ".env.local" ] && [ -f ".env.local.example" ]; then
+    echo -e "${YELLOW}⚠️  未找到 .env.local，从示例文件创建...${NC}"
 fi
+ensure_env_file
 
 # 加载环境变量
 if [ -f ".env.local" ]; then
     echo -e "${GREEN}✅ 加载环境变量: .env.local${NC}"
-    set -a
-    source .env.local
-    set +a
+    load_env_file
 fi
 
 # 检查 API Key
@@ -51,17 +41,13 @@ if [ -z "$DASHSCOPE_API_KEY" ]; then
 fi
 
 # 清除代理环境变量 (避免GNOME系统代理干扰API调用)
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
+clear_proxy_env
 echo -e "${GREEN}✅ 已清除代理设置${NC}"
 
 # 杀掉之前的进程
 echo -e "${YELLOW}🔄 清理旧进程...${NC}"
-pkill -f "integrated_system.py" 2>/dev/null
-sleep 1
-
-# 释放端口
-lsof -ti:$PORT | xargs kill -9 2>/dev/null
-sleep 1
+graceful_pkill_pattern "integrated_system.py" 3
+release_port "$PORT" 3
 
 # 🔧 重新加载 v4l2loopback 模块（确保虚拟摄像机能正常启动）
 echo -e "${YELLOW}🔧 重新加载 v4l2loopback 模块...${NC}"

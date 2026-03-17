@@ -5,6 +5,7 @@
 
 # 切换到脚本所在目录
 cd "$(dirname "$0")"
+source ./script_common.sh
 
 # 默认端口
 PORT=${1:-8082}
@@ -25,37 +26,26 @@ echo -e "${BLUE}║   🎬 完整录像模式 - OBS全程不间断录制        
 echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# 检查虚拟环境
-if [ ! -d ".venv" ]; then
-    echo -e "${RED}❌ 未找到虚拟环境 .venv${NC}"
-    echo -e "${YELLOW}请先运行: ./install_ubuntu.sh${NC}"
-    exit 1
-fi
+ensure_venv || exit 1
 
-# 检查 .env.local
-if [ ! -f ".env.local" ]; then
-    if [ -f ".env.local.example" ]; then
-        echo -e "${YELLOW}⚠️  未找到 .env.local，从示例文件创建...${NC}"
-        cp .env.local.example .env.local
-    fi
+if [ ! -f ".env.local" ] && [ -f ".env.local.example" ]; then
+    echo -e "${YELLOW}⚠️  未找到 .env.local，从示例文件创建...${NC}"
 fi
+ensure_env_file
 
 # 加载环境变量
-if [ -f ".venv" ]; then
+if [ -f ".env.local" ]; then
     echo -e "${GREEN}✅ 加载环境变量${NC}"
-    set -a
-    source .env.local 2>/dev/null
-    set +a
+    load_env_file
 fi
 
 # 清除代理
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
+clear_proxy_env
 
 # 清理旧进程
 echo -e "${YELLOW}🔄 清理旧进程...${NC}"
-pkill -f "integrated_system.py" 2>/dev/null
-lsof -ti:$PORT | xargs kill -9 2>/dev/null
-sleep 1
+graceful_pkill_pattern "integrated_system.py" 3
+release_port "$PORT" 3
 
 # 重新加载 v4l2loopback
 echo -e "${YELLOW}🔧 重新加载 v4l2loopback 模块...${NC}"
@@ -95,6 +85,7 @@ fi
 
 # 激活虚拟环境
 source .venv/bin/activate
+rotate_log "service_output.log" 20
 
 # 检查是否安装了obs-websocket-py
 echo ""

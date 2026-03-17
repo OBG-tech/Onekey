@@ -1,573 +1,279 @@
-# 🎬 智能视频分析整合系统
+# 🎬 OneKey 智能视频分析整合系统
 
-> **一键启动，智能分析，实时追踪**  
-> 整合 multi_person_tracker + ONE_KEY + OBS支持
-
-![Version](https://img.shields.io/badge/version-2.3-blue)
-![Python](https://img.shields.io/badge/python-3.8+-green)
-![License](https://img.shields.io/badge/license-MIT-orange)
+OneKey 是一个面向 Hackathon / 创客活动场景的智能视频分析系统，支持单摄像头、OBS 虚拟摄像头、多摄像头采集，集成人物追踪、人脸识别、实时 ASR、关键时刻管理、AI 分析与网页可视化。
 
 ---
 
-## 外围设备连接
-### 1、设备热点开启
-在主目录下运行
+## 1) 快速开始
+
+### Ubuntu（推荐）
 ```bash
-./build_virtual_network.sh #热点开启脚本
+chmod +x install_ubuntu.sh
+./install_ubuntu.sh
+logout
 ```
 
-如果输出如下所示：
+重新登录后：
 ```bash
-RTNETLINK answers: Operation not supported
-nohup: 忽略输入并把输出追加到 'nohup.out'
+python3 integrated_system.py --camera auto --camera-usb 05a3:9230
 ```
 
-则需要重新运行热点开启脚本
+### 常用一键脚本
+```bash
+./start.sh                    # 标准启动（交互选择模式）
+./start_live.sh               # 直播模式（后台+直播页）
+./start_multicam.sh           # 多摄像头模式（默认 0,2,4,6）
+./start_auto_recording.sh     # 自动启动 ASR
+./start_with_full_recording.sh # 启动并控制 OBS 全程录制
+```
 
-如果输出如下所示：
-```bash
-nohup: 忽略输入并把输出追加到 'nohup.out'
-```
-则说明热点开启成功
+---
 
-如果想要在ubuntu后台开启服务且不想要绑定终端，可以运行：
-```bash
-tmux new -t nohup #新建后台进程，电脑重启时运行
+## 2) 项目结构（核心）
+
+```text
+Onekey/
+├── integrated_system.py
+├── start_multicam_system.py
+├── multi_camera_capture.py
+├── multi_camera_recording.py
+├── key_moments_manager.py
+├── key_moments_viewer.py
+├── realtime_asr.py
+├── audio_manager.py
+├── microphone_recorder.py
+├── ai_live_commentary.py
+├── camera_utils.py
+├── esp32_server.py
+├── archive_data.py
+├── LAUNCH_GUI.py
+├── web_viewer.py
+├── obs_auto_record.py
+├── start.sh / start_live.sh / start_multicam.sh
+├── start_auto_recording.sh / start_with_full_recording.sh / stop_with_full_recording.sh
+├── install_ubuntu.sh
+├── .env.local.example
+├── requirements.txt
+├── FireRedASR/
+├── MagicLLM/
+├── web/
+│   ├── integrated.html
+│   ├── integrated_v2.html
+│   └── 启动中心.html
+├── integrated final.html
+├── integrated_final_live.html
+└── integrated_data/ (运行后自动生成)
 ```
-或：
+
+---
+
+## 3) 核心功能
+
+- 多摄像头支持（ARC 摄像头，推荐索引 `0,2,4,6`）
+- 人物追踪（YOLOv11n + ByteTrack）
+- 人脸识别（InsightFace，阈值约 0.40）
+- 关键时刻双轨检测（用户触发 + AI 多模态触发）
+- 实时语音识别（DashScope paraformer / FireRedASR）
+- AI 分析（Qwen / Claude）
+- 复古 Macintosh 风格 Web 界面
+- OBS 虚拟摄像头与 WebSocket 录制控制
+- ESP32 硬件按钮触发（TCP 服务）
+- 数据归档（按日期组织）
+
+---
+
+## 4) 启动模式
+
+### OBS 模式
 ```bash
-tmux a -t nohup #打开后台进程，新建以后运行
+python3 integrated_system.py --obs
 ```
-退出tmux服务时可使用以下操作退出：
+
+### 单摄像头模式
 ```bash
-Ctrl+b d
+python3 integrated_system.py --camera auto --camera-usb 05a3:9230
 ```
-### 2、开启按钮数据接收服务
-可使用以下命令开启按钮数据接收服务
+
+### 视频文件模式
 ```bash
-cd ~/onekey
+python3 integrated_system.py --video file.mp4
+```
+
+### 多摄像头模式
+```bash
+python3 start_multicam_system.py --cameras 0,2,4,6 --fps 30 --resolution 1280x720
+```
+
+### 常用附加参数
+```bash
+--ai        # 启用 AI 分析
+--no-face   # 关闭人脸识别
+```
+
+---
+
+## 5) AI 与环境变量配置
+
+复制模板并填写：
+```bash
+cp .env.local.example .env.local
+```
+
+关键变量：
+- `LLM_PROVIDER=qwen|claude`
+- `DASHSCOPE_API_KEY`
+- `ANTHROPIC_API_KEY` / `CLAUDE_API_KEY`
+- `LLM_MODEL`（如 `qwen-max`）
+- `VISION_MODEL`（如 `qwen-vl-max-latest`）
+- `VISION_MODEL_FAST`（如 `qwen-vl-plus`）
+- `ASR_PROVIDER=qwen|fireredasr`
+- `CAMERA_USB_VIDPID=05a3:9230`
+- `AUDIO_BACKEND=pulse|alsa`
+- `AUDIO_INPUT=default`
+- `WEB_STREAM_FPS=1~30`
+
+---
+
+## 6) 摄像头配置（Ubuntu）
+
+ARC 摄像头通常每个物理设备会产生两个节点：偶数索引用于视频采集，奇数索引多为元数据节点。  
+建议使用：`0,2,4,6`。
+
+为保证色彩与帧率，使用 MJPEG 并优先设置 FOURCC：
+```python
+cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+cap.set(cv2.CAP_PROP_FPS, 30)
+```
+
+---
+
+## 7) OBS 配置
+
+### Ubuntu 虚拟摄像头
+```bash
+sudo modprobe v4l2loopback devices=1 video_nr=8 card_label="OBS Virtual Camera" exclusive_caps=1
+```
+
+### OBS WebSocket（录制控制）
+- 默认端口：`4455`
+- 通过 `obs_auto_record.py` / `obs_recording_control.sh` 控制录制状态
+
+---
+
+## 8) 多摄像头建议
+
+推荐配置：
+- 摄像头：`0,2,4,6`
+- 分辨率：`1280x720`
+- 帧率：`30`
+- 编码格式：`MJPEG`
+
+启动：
+```bash
+./start_multicam.sh
+```
+
+---
+
+## 9) 硬件集成
+
+### ESP32 按钮
+```bash
 python3 esp32_server.py
 ```
+- 默认 TCP 端口：`5000`
+- 可用于触发关键时刻标记
 
-当输出：
+### RGB 灯条（Linux）
 ```bash
-服务器启动，监听端口 5000 ...
-等待 ESP32 连接（可以先启动服务器，ESP32 连接 WiFi 后会自动连接）...
-```
-时说明服务已正常开启，可以在终端实时查看哪些按钮已连接。
-log文件会保存在`~/onekey/button_log.txt`中
-
-### 3、开启摄像头灯条刷新
-运行以下命令：
-```bash
-cd ~/MagicLLM
 ./rgb.sh
 ```
-当输出：
+- 依赖 Linux 输入设备能力（evdev）
+
+---
+
+## 10) 关键时刻系统
+
+关键时刻来源：
+1. 用户触发：空格键 / ESP32 按钮  
+2. AI 触发：语义候选 + 帧对齐 + 多模态验证
+
+每个关键时刻可包含：
+- 视频片段（`.mp4`）
+- 关键帧（`.jpg`）
+- 元数据（`.json`，含描述/转写/分析）
+
+查看器：
+- 主系统：`http://localhost:8082`
+- 关键时刻查看器：`http://localhost:8086`
+
+---
+
+## 11) 数据管理
+
+运行后常见目录：
+- `integrated_data/key_moments/`
+- `integrated_data/audio/`
+- `integrated_data/transcripts/`
+- `integrated_data/face_database/`
+- `integrated_data/snapshots/`
+- `integrated_data/logs/`
+- `archives/`
+
+归档：
 ```bash
-==========================================
-通用按键'1'监听已启动
-监听按键: KEY_1 (键盘上的数字'1')
-串口: /dev/ttyACM0 @ 9600
-==========================================
-
-监听已启动，按 Ctrl+C 停止
-----------------------------------------
-INFO:正在扫描输入设备...
-INFO:监听设备 /dev/input/event18: Knight22 USB DEVICE
-INFO:监听设备 /dev/input/event14: input-remapper keyboard
-INFO:监听设备 /dev/input/event3: AT Translated Set 2 keyboard
-INFO:成功监听 3 个设备
-```
-时，说明服务已成功开启，可以在`~/MagicLLM/log.txt`中查看日志
-
-### 4、开启视频分析系统
-运行以下命令：
-```bash
-cd ~/onekey
-./start.sh
-```
-
-## 视频分析系统
-### 🚀 快速开始（30秒上手）
-
-#### Ubuntu 22.04 启动方式
-
-```bash
-# 1. 进入项目目录
-cd ~/onekey
-
-# 2. 激活虚拟环境（如果有）
-source .venv/bin/activate
-
-# 3. 自动选择摄像头启动
-python3 integrated_system.py --camera auto
-
-# 4. 或指定 ARC 摄像头（VID:PID = 05a3:9230）
-export CAMERA_USB_VIDPID=05a3:9230
-python3 integrated_system.py --camera auto
-
-# 5. 或使用图形界面
-python3 LAUNCH_GUI.py
-```
-
-#### macOS 启动方式（原系统）
-
-```bash
-# 1. 进入项目目录
-cd /Volumes/ZZH_Only/毕设
-
-# 2. 激活虚拟环境
-source .venv/bin/activate
-
-# 3. 启动（任选一种）
-python3 LAUNCH_GUI.py              # 图形界面
-./START_INTEGRATED_SYSTEM.command   # 命令行菜单
-./快速测试_摄像头.command            # 快速测试
+python3 archive_data.py
+python3 archive_data.py --dry-run
 ```
 
 ---
 
-### 📦 项目结构
+## 12) 平台说明
 
-```
-毕设/
-│
-├── 🎬 启动整合系统.command         ⭐ 主启动器（图形界面）
-├── LAUNCH_GUI.py                  图形界面启动器
-├── START_INTEGRATED_SYSTEM.command 命令行菜单
-├── 快速测试_摄像头.command          快速测试
-│
-├── integrated_system.py           整合系统核心 (777行)
-├── web/
-│   ├── integrated.html            复古风格Web界面
-│   └── 启动中心.html               启动中心页面
-│
-├── multi_person_tracker/          原多人追踪系统
-├── ONE_KEY/                       原AI分析系统
-│
-└── 📚 文档
-    ├── README_INTEGRATED.md       完整使用指南 ⭐
-    ├── 启动方式总览.md             启动方式对比
-    ├── 快速启动卡片.txt            快速参考
-    └── 整合完成总结.md             系统整合说明
-```
+### Ubuntu 22.04 / 24.04
+- 本分支仅支持 Ubuntu 平台
+- 推荐用于完整功能（多摄像头、OBS、硬件联动）
 
 ---
 
-### ✨ 核心功能
+## 13) 常见问题
 
-#### 🎯 1. 实时人物追踪
-
-* YOLOv11n高效检测
-* ByteTrack持久化追踪
-* 10色彩虹轨迹
-* 30点历史记录
-
-#### 👤 2. 人脸识别
-
-* InsightFace高精度识别
-* 0.40阈值智能匹配
-* 自动人脸数据库
-* 时间线快照记录
-
-#### 🔴 3. OBS流媒体支持
-
-* 虚拟相机自动检测
-* RTMP流支持
-* 实时流处理
-
-#### 🎨 4. Web可视化
-
-* Macintosh System 7.0复古风格
-* 实时统计展示
-* 人物识别卡片
-* 时间线查看
-
-#### 🤖 5. AI智能分析（可选）
-
-* 场景识别
-* 关键帧提取
-* 智能描述
-* **支持提供者：** Qwen 和 Claude Haiku 4.5
-
----
-
-### 🎮 使用模式
-
-#### 模式1: 📹 摄像头模式
-
-实时分析本地摄像头画面
-
+### 摄像头打不开
 ```bash
-# Ubuntu - 自动选择可用摄像头
-python3 integrated_system.py --camera auto
-
-# Ubuntu - 优先选择 ARC 摄像头 (05a3:9230)
-python3 integrated_system.py --camera auto --camera-usb 05a3:9230
-
-# 或手动指定索引
-python3 integrated_system.py --camera 0
-```
-
-#### 模式2: 📁 视频文件模式
-
-分析本地视频文件
-
-```bash
-python3 integrated_system.py --video "path/to/video.mp4"
-```
-
-#### 模式3: 🔴 OBS实时流模式
-
-接入OBS虚拟相机或RTMP流
-
-```bash
-# OBS虚拟相机
-python3 integrated_system.py --obs
-
-# RTMP流
-python3 integrated_system.py --obs --obs-url "rtmp://localhost/live"
-```
-
-#### 高级选项
-
-```bash
-# 启用AI分析
-python3 integrated_system.py --camera 0 --ai
-
-# 禁用人脸识别（仅追踪）
-python3 integrated_system.py --camera 0 --no-face
-
-# 组合使用
-python3 integrated_system.py --video file.mp4 --ai
-```
-
----
-
-### 🤖 AI 配置（可选）
-
-系统支持两种 AI 提供者：
-
-#### 方案 1：阿里云 Qwen（默认）
-
-```bash
-export DASHSCOPE_API_KEY="sk-your-dashscope-key"
-# 可选：指定模型
-export LLM_MODEL="qwen-max"              # 文本生成
-export VISION_MODEL="qwen-vl-max-latest"  # 视觉分析
-```
-
-**支持的 Qwen 模型：**
-
-* 文本：`qwen-max`, `qwen-plus`, `qwen-turbo`
-* 视觉：`qwen-vl-max-latest`, `qwen-vl-plus`
-
-#### 方案 2：Claude Haiku 4.5 ⚡
-
-```bash
-export LLM_PROVIDER="claude"
-export ANTHROPIC_API_KEY="sk-ant-your-key"
-# 或使用
-export CLAUDE_API_KEY="sk-ant-your-key"
-
-# 可选：指定模型
-export LLM_MODEL="claude-3-5-haiku-20241022"
-export VISION_MODEL="claude-3-5-haiku-20241022"
-```
-
-**Claude Haiku 4.5 优势：**
-
-* ⚡ 极速响应（与 Qwen 相当）
-* 💰 成本低廉（比 GPT-4o mini 便宜 3倍）
-* 🎯 高质量输出（Claude 3.5 家族）
-* 🖼️ 多模态支持（文本+图像）
-
-#### 环境变量完整列表
-
-| 变量名                 | 默认值    | 说明                |
-| ------------------- | ------ | ----------------- |
-| `LLM_PROVIDER`      | `qwen` | `qwen` 或 `claude` |
-| `DASHSCOPE_API_KEY` | -      | Qwen API 密钥       |
-| `ANTHROPIC_API_KEY` | -      | Claude API 密钥     |
-| `CLAUDE_API_KEY`    | -      | Claude API 密钥（别名） |
-| `LLM_MODEL`         | 自动     | 文本模型名             |
-| `VISION_MODEL`      | 自动     | 视觉模型名             |
-| `VISION_MODEL_FAST` | 自动     | 快速视觉模型            |
-| `CAMERA_USB_VIDPID` | -      | 摄像头 USB VID:PID (如 `05a3:9230`) |
-| `AUDIO_BACKEND`     | `pulse`| Linux音频: `pulse`/`alsa`, macOS: `avfoundation` |
-| `AUDIO_INPUT`       | `default` | 音频输入设备名 |
-
----
-
-### 🔧 系统要求
-
-#### 必需
-
-* Python 3.8+
-* opencv-python >= 4.8.0
-* ultralytics >= 8.0.0
-* numpy >= 1.24.0
-
-#### 可选
-
-* insightface >= 0.7.3 （人脸识别）
-* openai >= 1.0.0 （Qwen AI分析）
-* anthropic >= 0.18.0 （Claude AI分析）
-
-#### 硬件
-
-* CPU: Intel i5+ (推荐i7+)
-* RAM: 4GB+ (推荐8GB+)
-* 摄像头: 640x480+ 分辨率
-* OBS: 26.0+ 版本
-
----
-
-### 📺 OBS设置
-
-#### Ubuntu 22.04 - v4l2loopback 虚拟相机
-
-```bash
-# 1. 安装 v4l2loopback (如未安装)
-sudo apt install v4l2loopback-dkms
-
-# 2. 加载内核模块
-sudo modprobe v4l2loopback devices=1 video_nr=8 card_label="OBS Virtual Camera" exclusive_caps=1
-
-# 3. 启动 OBS Studio
-obs
-
-# 4. 在 OBS 中: 工具(Tools) → 虚拟相机(Virtual Camera) → 启动(Start)
-
-# 5. 启动本系统
-python3 integrated_system.py --obs
-```
-
-#### macOS - 启用虚拟相机
-
-1. 打开 OBS Studio
-2. 工具(Tools) → 虚拟相机(Virtual Camera)
-3. 点击"启动(Start)"
-4. 启动本系统，选择"OBS实时流模式"
-
-#### RTMP流配置（高级）
-
-详见 `README_INTEGRATED.md` 完整说明
-
----
-
-### 🌐 Web界面
-
-启动后自动打开：
-
-* 本地: `file:///Volumes/ZZH_Only/毕设/web/integrated.html`
-* 服务: `http://localhost:8080`
-
-**功能**:
-
-* 📊 实时统计（FPS/人数/帧数）
-* 👥 人物识别卡片
-* 🎯 Active Tracks显示
-* ⏱️ 时间线查看
-* 🎨 复古像素风格
-
----
-
-### 🎯 典型应用场景
-
-#### 场景1: 课堂互动分析
-
-OBS + 虚拟相机 → 实时分析学生参与度
-
-#### 场景2: 视频资料分析
-
-视频文件 + AI分析 → 提取关键帧和描述
-
-#### 场景3: 实验观察
-
-摄像头 + 人脸识别 → 追踪受试者行为
-
----
-
-### 📚 文档导航
-
-| 文档                                           | 内容             | 适合     |
-| -------------------------------------------- | -------------- | ------ |
-| [快速启动卡片.txt](快速启动卡片.txt)                     | ASCII艺术界面，快速上手 | 所有用户 ⭐ |
-| [README_INTEGRATED.md](README_INTEGRATED.md) | 完整使用指南         | 深入学习   |
-| [启动方式总览.md](启动方式总览.md)                       | 启动方式对比         | 选择最佳方式 |
-| [整合完成总结.md](整合完成总结.md)                       | 系统整合说明         | 了解项目   |
-
----
-
-### 🐛 常见问题
-
-#### Q: Ubuntu - 找不到摄像头？
-
-```bash
-# 1. 列出所有摄像头
 ls -la /dev/video*
-
-# 2. 查看 USB 摄像头信息
-lsusb | grep Camera
-
-# 3. 使用自动检测
-python3 integrated_system.py --camera auto --camera-usb 05a3:9230
+v4l2-ctl --list-devices
 ```
+确认用户已加入 `video` 组并重新登录。
 
-#### Q: Ubuntu - OBS虚拟相机连接不上？
-
+### OBS 虚拟摄像头不可用
 ```bash
-# 检查 v4l2loopback 模块
 lsmod | grep v4l2loopback
-
-# 重新加载模块
-sudo modprobe -r v4l2loopback
-sudo modprobe v4l2loopback devices=1 video_nr=8 card_label="OBS Virtual Camera"
 ```
+确认内核模块已加载并在 OBS 内启动虚拟摄像头。
 
-#### Q: macOS - 双击.command文件没反应？
-
-```bash
-chmod +x "🎬 启动整合系统.command"
-```
-
-#### Q: 人脸识别不工作？
-
-```bash
-pip install insightface
-```
-
-#### Q: 端口8080被占用？
-
-```bash
-lsof -i :8080
-kill -9 <PID>
-```
-
-更多问题请查看 `README_INTEGRATED.md`
+### 端口占用
+检查 8082 / 8086 / 5000 / 4455 是否被占用，调整启动参数或结束冲突进程。
 
 ---
 
-### 🎨 界面预览
+## 14) 性能建议
 
-#### 图形化启动器
-
-```
-┌─────────────────────────────────────┐
-│  🎬 智能视频分析整合系统             │
-├─────────────────────────────────────┤
-│  ┌──────────┐  ┌──────────┐        │
-│  │📹 摄像头 │  │📁 视频   │        │
-│  └──────────┘  └──────────┘        │
-│  ┌──────────┐  ┌──────────┐        │
-│  │🔴 OBS流  │  │🎯 旧版   │        │
-│  └──────────┘  └──────────┘        │
-└─────────────────────────────────────┘
-```
-
-#### Web界面
-
-复古Macintosh System 7.0风格，实时显示统计、人物卡片、时间线
-
----
-
-### 📊 性能指标
-
-* **追踪速度**: 25-30 FPS (Intel i7)
-* **人脸识别**: <100ms/人
-* **内存占用**: ~500MB
-* **支持人数**: 10+ 同时追踪
-
----
-
-### 🔄 版本历史
-
-#### v2.3 (2025-12-01) - 整合版 ⭐
-
-* ✅ 整合multi_person_tracker + ONE_KEY
-* ✅ 新增OBS虚拟相机支持
-* ✅ 图形化启动器LAUNCH_GUI.py
-* ✅ 三种一键启动方式
-* ✅ 复古像素风格Web界面
-* ✅ 完整文档系统
-
-#### v2.2 (之前)
-
-* ✅ 多色追踪系统
-* ✅ 人脸识别阈值优化
-* ✅ 非阻塞显示
-
----
-
-### 🤝 贡献
-
-欢迎提Issue和PR！
-
----
-
-### 📄 许可证
-
-本项目整合了多个开源组件：
-
-* YOLOv11 (AGPL-3.0)
-* InsightFace (MIT)
-* OpenCV (Apache 2.0)
-
----
-
-### 🆘 获取帮助
-
-#### 查看帮助
-
+- 多摄像头优先 `1280x720 @ 30fps`
+- Web 低延迟可下调 `WEB_STREAM_FPS`
+- 资源紧张时可关闭人脸识别（`--no-face`）
+- 长时间运行可使用：
 ```bash
-python3 integrated_system.py --help
-```
-
-#### 启用调试模式
-
-```bash
-python3 integrated_system.py --camera 0 --verbose
-```
-
-#### 联系方式
-
-* 项目位置: `/Volumes/ZZH_Only/毕设`
-* 启动中心: `web/启动中心.html`
-
----
-
-### 🎉 开始使用
-
-**推荐新手**:
-
-```bash
-双击: 🎬 启动整合系统.command
-→ 选择"📹 摄像头模式"
-```
-
-**推荐进阶**:
-
-```bash
-双击: 🎬 启动整合系统.command
-→ 选择"🔴 OBS实时流模式"
-→ 勾选"启用AI分析"
-```
-
-**推荐开发**:
-
-```bash
-python3 integrated_system.py --help
+./auto_restart.sh 2
 ```
 
 ---
 
-<div align="center">
+## 15) 版本记录
 
-**🎬 享受智能视频分析的乐趣！**
-
-Made with ❤️ by ZZH
-
-</div>
+### v2.3
+- 整合多模式视频输入、关键时刻管理、AI 分析与 Web 可视化
+- 增强多摄像头与 OBS 联动能力
+- 完善自动录音录像与数据归档流程
 

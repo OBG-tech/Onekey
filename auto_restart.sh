@@ -27,6 +27,8 @@ echo ""
 
 # 切换到脚本所在目录
 cd "$(dirname "$0")"
+source ./script_common.sh
+rotate_log "${LOG_FILE}" 20
 
 # 记录日志函数
 log() {
@@ -69,11 +71,9 @@ EOF
 stop_service() {
     log "🛑 停止服务..."
     
-    # 杀掉 integrated_system.py 进程
-    pkill -f "integrated_system.py" 2>/dev/null
-    
-    # 释放端口
-    lsof -ti:${PORT} | xargs kill -9 2>/dev/null
+    # 优先优雅停止，再超时强制结束
+    graceful_pkill_pattern "integrated_system.py" 3
+    release_port "${PORT}" 3
     
     # 等待进程完全停止
     sleep 2

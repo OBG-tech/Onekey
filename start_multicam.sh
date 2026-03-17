@@ -7,6 +7,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+cd "$(dirname "$0")"
+source ./script_common.sh
 
 echo "╔════════════════════════════════════════════════════════╗"
 echo "║   🎥 多摄像头集成系统 (4K @ 60 FPS)                  ║"
@@ -19,7 +21,7 @@ for port in 8082 8086; do
     pid=$(lsof -ti :$port)
     if [ -n "$pid" ]; then
         echo -e "${YELLOW}🧹 正在清理端口 $port (PID: $pid)...${NC}"
-        kill -9 $pid 2>/dev/null
+        release_port "$port" 3
     fi
 done
 
@@ -144,6 +146,7 @@ echo -e "${GREEN}🚀 启动多摄像头集成系统...${NC}\n"
 
 # 启动 Key Moments Viewer 服务 (端口 8086)
 echo -e "${BLUE}📹 启动 Key Moments Viewer (端口 8086)...${NC}"
+rotate_log "viewer_service.log" 20
 python key_moments_viewer.py --port 8086 > viewer_service.log 2>&1 &
 MOMENTS_VIEWER_PID=$!
 sleep 2

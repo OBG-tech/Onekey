@@ -3,6 +3,7 @@
 # 用法: ./stop_with_full_recording.sh
 
 cd "$(dirname "$0")"
+source ./script_common.sh
 
 # OBS WebSocket配置
 OBS_WS_PORT=4455
@@ -48,14 +49,7 @@ if [ -f "service.pid" ]; then
     PID=$(cat service.pid)
     if ps -p $PID > /dev/null 2>&1; then
         echo "停止进程 PID: $PID"
-        kill $PID
-        sleep 2
-        
-        # 强制停止
-        if ps -p $PID > /dev/null 2>&1; then
-            echo "强制停止..."
-            kill -9 $PID
-        fi
+        graceful_kill_by_pid "$PID" 3
         
         rm -f service.pid
         echo -e "${GREEN}✅ 系统进程已停止${NC}"
@@ -65,8 +59,7 @@ if [ -f "service.pid" ]; then
     fi
 else
     echo -e "${YELLOW}⚠️  未找到 service.pid，尝试杀掉所有相关进程${NC}"
-    pkill -f "integrated_system.py"
-    sleep 1
+    graceful_pkill_pattern "integrated_system.py" 3
     echo -e "${GREEN}✅ 清理完成${NC}"
 fi
 

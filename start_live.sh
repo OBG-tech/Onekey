@@ -4,6 +4,7 @@
 
 # 切换到脚本所在目录
 cd "$(dirname "$0")"
+source ./script_common.sh
 
 # 默认端口
 PORT=${1:-8082}
@@ -24,26 +25,17 @@ echo -e "${BLUE}║   🎬 智能视频分析系统 + AI直播间 (完整版)   
 echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# 检查虚拟环境
-if [ ! -d ".venv" ]; then
-    echo -e "${RED}❌ 未找到虚拟环境 .venv${NC}"
-    exit 1
-fi
+ensure_venv || exit 1
 
-# 检查 .env.local
-if [ ! -f ".env.local" ]; then
-    if [ -f ".env.local.example" ]; then
-        echo -e "${YELLOW}⚠️  未找到 .env.local，从示例文件创建...${NC}"
-        cp .env.local.example .env.local
-    fi
+if [ ! -f ".env.local" ] && [ -f ".env.local.example" ]; then
+    echo -e "${YELLOW}⚠️  未找到 .env.local，从示例文件创建...${NC}"
 fi
+ensure_env_file
 
 # 加载环境变量
 if [ -f ".env.local" ]; then
     echo -e "${GREEN}✅ 加载环境变量: .env.local${NC}"
-    set -a
-    source .env.local
-    set +a
+    load_env_file
 fi
 
 # 显示OneKey环境变量（如果存在）
@@ -54,79 +46,53 @@ if [ -n "$DASHSCOPE_API_KEY" ]; then
 fi
 
 # 清除代理
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
+clear_proxy_env
 echo -e "${GREEN}✅ 已清除代理设置${NC}"
 
 # 清理旧进程
 echo -e "${YELLOW}🔄 清理旧进程...${NC}"
-pkill -f "integrated_system.py" 2>/dev/null
-lsof -ti:$PORT | xargs kill -9 2>/dev/null
-sleep 1
+graceful_pkill_pattern "integrated_system.py" 3
+release_port "$PORT" 3
 
-# 🔧 检查操作系统
-OS_TYPE=$(uname -s)
-
-if [ "$OS_TYPE" = "Linux" ]; then
-    # Linux: 重新加载 v4l2loopback 模块
-    echo -e "${YELLOW}🔧 重新加载 v4l2loopback 模块...${NC}"
-    sudo modprobe -r v4l2loopback 2>/dev/null
-    sudo modprobe v4l2loopback devices=1 video_nr=8 card_label="OBS Virtual Camera" exclusive_caps=1
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}   ✅ v4l2loopback 模块加载成功${NC}"
-    fi
-    sleep 1
+# Linux: 重新加载 v4l2loopback 模块
+echo -e "${YELLOW}🔧 重新加载 v4l2loopback 模块...${NC}"
+sudo modprobe -r v4l2loopback 2>/dev/null
+sudo modprobe v4l2loopback devices=1 video_nr=8 card_label="OBS Virtual Camera" exclusive_caps=1
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}   ✅ v4l2loopback 模块加载成功${NC}"
 fi
+sleep 1
 
 # 启动 OBS
 echo -e "${YELLOW}📹 检查 OBS...${NC}"
-if [ "$OS_TYPE" = "Linux" ]; then
-    if ! pgrep -x "obs" > /dev/null; then
-        nohup obs > /dev/null 2>&1 &
-        sleep 5
-        echo -e "${GREEN}   ✅ OBS 已启动${NC}"
-    else
-        echo -e "${GREEN}   ✅ OBS 已在运行${NC}"
-    fi
+if ! pgrep -x "obs" > /dev/null; then
+    nohup obs > /dev/null 2>&1 &
+    sleep 5
+    echo -e "${GREEN}   ✅ OBS 已启动${NC}"
 else
-    # macOS
-    if ! pgrep -x "OBS" > /dev/null; then
-        echo -e "${YELLOW}   启动 OBS...${NC}"
-        open -a "OBS" 2>/dev/null
-        sleep 5
-    else
-        echo -e "${GREEN}   ✅ OBS 已在运行${NC}"
-    fi
+    echo -e "${GREEN}   ✅ OBS 已在运行${NC}"
 fi
 
 # 提示启动虚拟摄像机
 echo -e "${YELLOW}🎥 启动 OBS 虚拟摄像机...${NC}"
-if [ "$OS_TYPE" = "Linux" ]; then
-    V4L2_USE_COUNT=$(lsmod | grep v4l2loopback | awk '{print $3}')
-    if [ "$V4L2_USE_COUNT" == "0" ] || [ -z "$V4L2_USE_COUNT" ]; then
-        zenity --question --title="OBS 虚拟摄像机" \
-            --text="请在 OBS 中启动虚拟摄像机：\n\n工具(Tools) → 虚拟相机(Virtual Camera) → 启动(Start)\n\n完成后点击'是'继续" \
-            --ok-label="是，已启动" --cancel-label="取消" \
-            --width=400 2>/dev/null
-        
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}   ❌ 用户取消，退出${NC}"
-            exit 1
-        fi
-    else
-        echo -e "${GREEN}   ✅ 虚拟摄像机已激活${NC}"
+V4L2_USE_COUNT=$(lsmod | grep v4l2loopback | awk '{print $3}')
+if [ "$V4L2_USE_COUNT" == "0" ] || [ -z "$V4L2_USE_COUNT" ]; then
+    zenity --question --title="OBS 虚拟摄像机" \
+        --text="请在 OBS 中启动虚拟摄像机：\n\n工具(Tools) → 虚拟相机(Virtual Camera) → 启动(Start)\n\n完成后点击'是'继续" \
+        --ok-label="是，已启动" --cancel-label="取消" \
+        --width=400 2>/dev/null
+    
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}   ❌ 用户取消，退出${NC}"
+        exit 1
     fi
 else
-    # macOS
-    echo -e "${YELLOW}   ⏳ 请确认 OBS 中虚拟摄像机已启动${NC}"
-    echo -e "${YELLOW}   （工具 → 启动虚拟摄像机）${NC}"
-    echo ""
-    read -p "   按任意键继续... " -n 1 -r
-    echo ""
-    echo -e "${GREEN}   ✅ 继续启动系统${NC}"
+    echo -e "${GREEN}   ✅ 虚拟摄像机已激活${NC}"
 fi
 
 # 激活虚拟环境
 source .venv/bin/activate
+rotate_log "service_output.log" 20
 
 # 检查obs-websocket-py (用于OBS录制控制)
 echo ""
@@ -249,11 +215,7 @@ echo ""
 echo -e "${GREEN}🌐 打开Web界面...${NC}"
 WEB_URL="http://localhost:${PORT}/integrated_final_live.html"
 
-if command -v open &> /dev/null; then
-    # macOS
-    open "$WEB_URL" &> /dev/null &
-elif command -v xdg-open &> /dev/null; then
-    # Linux
+if command -v xdg-open &> /dev/null; then
     xdg-open "$WEB_URL" &> /dev/null &
 else
     echo -e "${YELLOW}⚠️  无法自动打开浏览器${NC}"

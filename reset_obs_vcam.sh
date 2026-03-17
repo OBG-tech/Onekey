@@ -1,6 +1,8 @@
 #!/bin/bash
 # OBS虚拟相机完全重置脚本
 # 解决OBS虚拟相机反复无法启动的问题
+cd "$(dirname "$0")"
+source ./script_common.sh
 
 echo "=========================================="
 echo "OBS虚拟相机完全重置"
@@ -8,9 +10,9 @@ echo "=========================================="
 
 # 1. 停止所有相关进程
 echo "🔄 停止所有OBS和分析系统进程..."
-pkill -9 obs 2>/dev/null
-pkill -f integrated_system.py 2>/dev/null
-pkill -f esp32_server.py 2>/dev/null
+graceful_pkill_pattern "obs" 3
+graceful_pkill_pattern "integrated_system.py" 3
+graceful_pkill_pattern "esp32_server.py" 3
 sleep 2
 
 # 2. 检查进程是否已停止
